@@ -38,13 +38,14 @@ Then `pnpm dev` and open http://localhost:3000.
 3. **Realtime Database:** create a database (pick the region closest to you), start in locked mode.
 4. **Project settings → Your apps:** add a Web app and copy its config into `web/.env.local`
    (leave `NEXT_PUBLIC_USE_FIREBASE_EMULATORS` empty).
-5. Deploy the rules:
-   ```sh
-   cd firebase
-   # set your project id in .firebaserc, then:
-   firebase login
-   firebase deploy --only database
-   ```
+5. Deploy the rules, either way works:
+   - **Console (no CLI needed):** Realtime Database → **Rules** tab → paste the contents of
+     `firebase/database.rules.json` → **Publish**. Repeat whenever that file changes.
+   - **CLI:** set your project id in `firebase/.firebaserc`, then
+     ```sh
+     firebase login --reauth     # if you see 401 / "invalid authentication credentials"
+     cd firebase && firebase deploy --only database
+     ```
 6. **Authentication → Settings → Authorized domains:** add your web domain when you deploy.
 
 ## Scripts
