@@ -1,0 +1,12 @@
+{
+  "name": "watchparty",
+  "private": true,
+  "packageManager": "pnpm@11.22.0",
+  "scripts": {
+    "dev": "pnpm --filter @watchparty/web dev",
+    "emulators": "cd firebase && firebase emulators:start --only auth,database --project demo-watchparty",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test"
+  }
+}

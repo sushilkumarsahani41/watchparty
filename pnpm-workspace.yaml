@@ -1,0 +1,7 @@
+packages:
+  - packages/*
+  - web
+  - desktop
+allowBuilds:
+  '@firebase/util': false
+  protobufjs: false

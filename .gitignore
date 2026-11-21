@@ -1,0 +1,29 @@
+node_modules/
+.pnpm-store/
+
+# builds
+.next/
+out/
+dist/
+build/
+release/
+*.tsbuildinfo
+next-env.d.ts
+
+# secrets
+.env
+.env.*
+!.env.example
+!.env.local.example
+*serviceAccount*.json
+
+# firebase
+.firebase/
+firebase-debug.log
+database-debug.log
+
+# misc
+.DS_Store
+*.log
+coverage/
+.vercel
