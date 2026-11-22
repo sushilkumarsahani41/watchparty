@@ -79,7 +79,7 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] Real R2 upload run
 - [x] Release keystore (`android/watchparty-release.jks` + `keystore.properties`, both gitignored; back them up)
       and `web/public/.well-known/assetlinks.json` with its fingerprint
-- [ ] Deploy web to Cloudflare at `watchparty.greatshark.in` (needs `wrangler login`)
+- [x] Web deployed to Cloudflare at `https://watchparty.greatshark.in` (`cd web && pnpm run deploy`)
 - [ ] Add `watchparty.greatshark.in` to Firebase Auth authorized domains and the R2 CORS list
 - [ ] Confirm Android video on a real phone (emulator decoder shows glitches)
 

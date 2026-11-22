@@ -61,9 +61,11 @@ pnpm dev                                   # http://localhost:3000
 ```
 Firebase web config: Project settings → Your apps → Web app → config.
 
-**Deploy:** any Next.js host works (Vercel is the simplest: import the repo, root directory `web`, add the
-`NEXT_PUBLIC_*` env vars). Then add the domain under Firebase **Authentication → Settings → Authorized
-domains**, and to the R2 CORS list.
+**Deploy (Cloudflare):** the web app is a static site. `cd web && pnpm exec wrangler login` once, then
+`pnpm run deploy` builds it (with the `NEXT_PUBLIC_*` values in `web/.env.local`) and publishes it to
+`https://watchparty.greatshark.in` (`web/wrangler.jsonc`). Room links `/room/<code>` are served by the one room
+page via `web/public/_redirects`. The domain must also be in Firebase **Authentication → Settings → Authorized
+domains** and in the R2 CORS list.
 
 ## 4. Android app
 Requirements: Android Studio (or the SDK command-line tools) with **SDK Platform 37.1**, JDK 17+.
