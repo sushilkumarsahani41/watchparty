@@ -27,3 +27,17 @@ database-debug.log
 *.log
 coverage/
 .vercel
+
+# android
+android/.gradle/
+android/.kotlin/
+android/build/
+android/app/build/
+android/local.properties
+android/app/google-services.json
+android/**/*.jks
+android/**/*.keystore
+android/captures/
+android/.idea/
+*.apk
+*.aab

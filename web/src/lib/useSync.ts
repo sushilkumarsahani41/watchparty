@@ -107,6 +107,9 @@ export function useSync({
         rev: (prev?.rev ?? 0) + 1,
         by: uid,
       }).catch((e) => console.warn("state write failed", e));
+      // Use our write immediately: reconciling against the old state before React re-renders
+      // would seek away and straight back.
+      stateRef.current = { playing, position, updatedAt: serverNow(), rate: 1, rev: (prev?.rev ?? 0) + 1, by: uid };
     },
     [roomId, uid],
   );
