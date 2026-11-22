@@ -68,9 +68,18 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
       33 objects with correct types/cache headers → room → plays and syncs in two web browsers.
 - [ ] Real Cloudflare R2 run (needs bucket + API token)
 
-### 7. Polish + release
-- [ ] Error states, reconnect handling, README (Firebase, R2, Android setup)
-- [ ] Deploy web (Vercel or Cloudflare Pages), signed release APK, Electron builds (dmg, exe)
+### 7. Polish + release (in progress)
+- [x] Error states: room not found, player errors, reconnecting banner, auth error messages, upload retry/discard
+- [x] Reconnect: presence via onDisconnect + `.info/connected` (web + Android); Android background = offline
+- [x] README: Firebase, R2, web, Android (release signing, App Links), desktop, local testing
+- [x] Desktop packaging (electron-builder): mac dir build verified (315 MB app, 3 MB app code); dmg/exe targets configured
+- [x] Android release build (R8, 2.9 MB) verified on the emulator: login, deep link, sync, no crashes
+- [x] Web checked at phone width (no horizontal scroll)
+- [ ] Deploy web (needs your choice of host + login)
+- [ ] Real R2 upload run (needs bucket + API token)
+- [ ] Release keystore + assetlinks.json (needs your web domain)
+- [ ] Confirm Android video on a real phone (emulator decoder shows glitches)
+- Minor: two Compose deprecation warnings (password field, Slider overload) left as is.
 
 ## Needs from you (when we get there)
 - Cloudflare R2 bucket + API keys (milestone 6)

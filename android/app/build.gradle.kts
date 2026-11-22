@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,6 +8,12 @@ plugins {
 
 val webHost = providers.gradleProperty("watchparty.webHost").getOrElse("watch.example.com")
 val useEmulators = providers.gradleProperty("watchparty.useEmulators").getOrElse("false").toBoolean()
+
+// Release signing: android/keystore.properties (gitignored) with storeFile, storePassword, keyAlias, keyPassword.
+val keystoreProps = Properties().apply {
+    val f = rootProject.file("keystore.properties")
+    if (f.exists()) f.inputStream().use { load(it) }
+}
 
 android {
     namespace = "dev.watchparty.app"
@@ -26,8 +34,22 @@ android {
         manifestPlaceholders["webHost"] = webHost
     }
 
+    signingConfigs {
+        if (keystoreProps.isNotEmpty()) {
+            create("release") {
+                storeFile = rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword = keystoreProps.getProperty("storePassword")
+                keyAlias = keystoreProps.getProperty("keyAlias")
+                keyPassword = keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Without keystore.properties the release APK is signed with the debug key: installable for
+            // testing, but not for the Play Store.
+            signingConfig = signingConfigs.findByName("release") ?: signingConfigs.getByName("debug")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")

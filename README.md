@@ -1,59 +1,134 @@
 # WatchParty
 
-Personal watch-together app: synced HLS playback (anyone can play/pause/seek) plus chat.
-Videos are transcoded locally and stored on Cloudflare R2. Firebase (free Spark plan) handles auth,
-realtime sync and chat. See [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md) for the full design.
+Personal watch-together app. Everyone in a room sees the same moment of the video; anyone can play, pause or
+seek, and there's a chat. Videos are transcoded on your own computer and stored on Cloudflare R2. Firebase
+(free Spark plan) handles accounts, realtime sync and chat. There is no backend server.
 
-| Path | What |
-|---|---|
-| `packages/shared` | Types, RTDB path builders, sync math (+ vitest tests) |
-| `web` | Next.js app (login, rooms, player, chat) |
-| `firebase` | Realtime Database rules + config |
-| `desktop` | Electron uploader (milestone 5) |
+| Part | Path | What it is |
+|---|---|---|
+| Android app | `android/` | Main viewer: Kotlin, Jetpack Compose, Media3 (ExoPlayer), Firebase |
+| Web app | `web/` | Same features in the browser (Next.js, hls.js). Invite-link fallback |
+| Desktop uploader | `desktop/` | Electron: pick a video → FFmpeg HLS → upload to R2 → create room → invite link |
+| Shared | `packages/shared/` | Data types, database paths, sync math + test vectors used by all apps |
+| Firebase | `firebase/` | Realtime Database security rules |
 
-## Requirements
-- Node 20+ and pnpm (`corepack enable`)
-- Firebase CLI (`npm i -g firebase-tools`); Java is needed only for the local emulators
+Design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). Changes since then and progress: [`PLAN.md`](PLAN.md).
 
-## Quick start (local emulators, no Firebase project needed)
+## How sync works (short version)
+The room stores one shared playback state: `playing`, `position`, and the server time it was written.
+Every player computes where the video *should* be (`position + elapsed`) and corrects itself: a jump if it's more
+than 1.5s off, a gentle 0.95×/1.05× speed change if it's slightly off. If anyone is buffering, everyone pauses
+locally ("Bob is buffering…") and resumes together. Details: `packages/shared/src/sync.ts`.
+
+---
+
+## 1. Firebase (once)
+The project `watchparty-o222t` already exists. For a fresh project:
+1. [Firebase console](https://console.firebase.google.com) → create a project (Spark plan).
+2. **Authentication → Sign-in method:** enable **Email/Password**.
+3. **Realtime Database → Create database** (Singapore `asia-southeast1` is closest to India), locked mode.
+4. Deploy the rules (either way):
+   - Console: Realtime Database → **Rules** → paste `firebase/database.rules.json` → **Publish**.
+   - CLI: put the project id in `firebase/.firebaserc`, then `firebase login --reauth` if needed and
+     `cd firebase && firebase deploy --only database`.
+
+## 2. Cloudflare R2 (once)
+1. Cloudflare dashboard → **R2** → create bucket `watchparty-media` (location hint: Asia-Pacific).
+2. Make it publicly readable: **Settings → Custom Domains** → connect e.g. `media.example.com`
+   (or enable the `r2.dev` public URL for testing). This is your **media base URL**.
+3. **R2 → Manage API tokens → Create API token**: *Object Read & Write*, limited to this bucket. Copy the
+   Access Key ID, Secret Access Key, and your Account ID.
+4. Bucket **Settings → CORS policy**:
+   ```json
+   [{
+     "AllowedOrigins": ["https://<your-web-domain>", "http://localhost:3000"],
+     "AllowedMethods": ["GET", "HEAD"],
+     "AllowedHeaders": ["*"],
+     "ExposeHeaders": ["Content-Length", "Content-Range", "ETag"],
+     "MaxAgeSeconds": 86400
+   }]
+   ```
+   (The Android app doesn't need CORS.)
+5. Optional: **Object lifecycle rule** to delete `videos/` objects older than N days.
+
+Videos live at `videos/<random-uuid>/…`. The UUID makes the URL unguessable; it isn't access control.
+
+## 3. Web app
 ```sh
 pnpm install
-pnpm emulators            # auth :9099, database :9000, UI :4000
-cp web/.env.local.example web/.env.local
+cp web/.env.local.example web/.env.local   # fill in Firebase web config (+ media base URL)
+pnpm dev                                   # http://localhost:3000
 ```
-Fill `web/.env.local` with demo values:
+Firebase web config: Project settings → Your apps → Web app → config.
+
+**Deploy:** any Next.js host works (Vercel is the simplest: import the repo, root directory `web`, add the
+`NEXT_PUBLIC_*` env vars). Then add the domain under Firebase **Authentication → Settings → Authorized
+domains**, and to the R2 CORS list.
+
+## 4. Android app
+Requirements: Android Studio (or the SDK command-line tools) with **SDK Platform 37.1**, JDK 17+.
+
+```sh
+cd android
+firebase apps:sdkconfig ANDROID <android-app-id> --project <project> -o app/google-services.json
+./gradlew :app:assembleDebug               # app/build/outputs/apk/debug/app-debug.apk
 ```
-NEXT_PUBLIC_FIREBASE_API_KEY=demo-key
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=demo-watchparty.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_DATABASE_URL=http://127.0.0.1:9000?ns=demo-watchparty
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-watchparty
-NEXT_PUBLIC_FIREBASE_APP_ID=demo-app
-NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true
+`google-services.json` is gitignored. The Android app is registered as `dev.watchparty.app`.
+
+Settings in `android/gradle.properties`:
+- `watchparty.webHost` — your web domain. Used for invite links and to open `https://<host>/room/<id>` links
+  directly in the app.
+- `watchparty.useEmulators` — `true` to use local Firebase emulators (via `10.0.2.2`).
+
+**Release build:** create a keystore and `android/keystore.properties` (gitignored):
+```properties
+storeFile=../watchparty-release.jks
+storePassword=…
+keyAlias=watchparty
+keyPassword=…
 ```
-Then `pnpm dev` and open http://localhost:3000.
+then `./gradlew :app:assembleRelease` (R8-minified, ~3 MB). Without `keystore.properties` the release APK is
+signed with the debug key: fine for sideloading to friends, not for the Play Store.
 
-## Firebase setup (real project)
-1. Create a project in the [Firebase console](https://console.firebase.google.com) (Spark plan is fine).
-2. **Authentication → Sign-in method:** enable **Email/Password**.
-3. **Realtime Database:** create a database (pick the region closest to you), start in locked mode.
-4. **Project settings → Your apps:** add a Web app and copy its config into `web/.env.local`
-   (leave `NEXT_PUBLIC_USE_FIREBASE_EMULATORS` empty).
-5. Deploy the rules, either way works:
-   - **Console (no CLI needed):** Realtime Database → **Rules** tab → paste the contents of
-     `firebase/database.rules.json` → **Publish**. Repeat whenever that file changes.
-   - **CLI:** set your project id in `firebase/.firebaserc`, then
-     ```sh
-     firebase login --reauth     # if you see 401 / "invalid authentication credentials"
-     cd firebase && firebase deploy --only database
-     ```
-6. **Authentication → Settings → Authorized domains:** add your web domain when you deploy.
+**Open invite links straight in the app (App Links):** host
+`https://<webHost>/.well-known/assetlinks.json` (put it in `web/public/.well-known/`):
+```json
+[{
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "dev.watchparty.app",
+    "sha256_cert_fingerprints": ["<SHA-256 of your signing cert>"]
+  }
+}]
+```
+Get the fingerprint with `keytool -list -v -keystore watchparty-release.jks`. Without this, Android asks which
+app to open the link with. `watchparty://room/<id>` links always open the app.
 
-## Scripts
-| Command | What |
-|---|---|
-| `pnpm dev` | Run the web app |
-| `pnpm emulators` | Run Firebase Auth + RTDB emulators |
-| `pnpm -r typecheck` | Typecheck all packages |
-| `pnpm -r test` | Run unit tests |
+## 5. Desktop uploader
+```sh
+cd desktop
+cp .env.example .env      # optional: dev defaults; the app's Settings screen can set everything
+pnpm dev                  # run from source
+pnpm dist:mac             # dmg (build on a Mac)
+pnpm dist:win             # NSIS installer (build on Windows: ffmpeg-static ships a per-OS binary)
+```
+Flow: sign in (same account as the apps) → pick a video → title, qualities (360p–1080p; tiers above the source
+are skipped), encoder (libx264, or Apple VideoToolbox / NVIDIA NVENC when available) → **Encode & upload** →
+copy the invite link. Upload order is segments → quality playlists → `master.m3u8`, with 5 retries per file;
+a failed upload can be retried without re-encoding and skips files already on R2.
 
-Cloudflare R2 setup and the desktop uploader are documented in milestones 5–6.
+R2 keys are stored encrypted with the OS keychain (`safeStorage`) in the app's settings file, never in the repo.
+
+## 6. Local development and testing
+```sh
+pnpm emulators      # Firebase Auth + RTDB emulators (needs Java), project demo-watchparty
+pnpm -r typecheck   # all TS packages
+pnpm -r test        # shared sync tests (+ vectors), desktop ffmpeg/upload tests
+cd android && ./gradlew :app:testDebugUnitTest   # Kotlin sync math against the same vectors
+```
+Web against emulators: set `NEXT_PUBLIC_USE_FIREBASE_EMULATORS=true` in `web/.env.local`.
+Desktop dev-only overrides: `WATCHPARTY_USE_EMULATORS=true`, `R2_ENDPOINT=<S3-compatible URL>`,
+`WATCHPARTY_PICK_FILE=<path>` (skips the file dialog).
+
+> Running Electron from VS Code's terminal: unset `ELECTRON_RUN_AS_NODE` first, or Electron starts as plain Node.

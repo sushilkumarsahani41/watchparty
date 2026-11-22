@@ -42,3 +42,4 @@ android/.idea/
 *.apk
 *.aab
 release/
+android/keystore.properties
