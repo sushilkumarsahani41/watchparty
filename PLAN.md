@@ -20,12 +20,12 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] Email signup / login / reset, `AuthGate`, profile self-heal
 - [x] Verified with two accounts against the live project
 
-### 2. Rooms + chat (web)
-- [ ] Room page: self-join into `roomMembers` + `userRooms` on open
-- [ ] "Create test room" button on /rooms (hardcoded public test HLS URL)
-- [ ] My-rooms list, join by link/code
-- [ ] `ChatPanel` (last 100 messages, 1000-char limit), `Participants` with presence + onDisconnect
-- *Done when:* two browsers chat in one room.
+### 2. Rooms + chat (web) ✅
+- [x] Room page: self-join into `roomMembers` + `userRooms` on open
+- [x] "Create test room" button on /rooms (hardcoded public test HLS URL)
+- [x] My-rooms list, join by link/code
+- [x] `ChatPanel` (last 100 messages, 1000-char limit), `Participants` with presence + onDisconnect
+- [x] Verified: two browsers join via link, chat both ways, presence updates, bad links show "Room not found"
 
 ### 3. Synced player (web)
 - [ ] `VideoPlayer` (hls.js, native HLS fallback), custom controls, keyboard
