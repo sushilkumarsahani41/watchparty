@@ -3,8 +3,9 @@ import react from "@vitejs/plugin-react";
 
 export default defineConfig({
   main: {
-    // @watchparty/shared ships TS source, so it must be bundled rather than required at runtime.
-    build: { externalizeDeps: { exclude: ["@watchparty/shared"] } },
+    // Bundle these (tree-shaken) instead of shipping their node_modules: shared ships TS source, and
+    // Firebase/AWS SDKs are huge on disk. Only ffmpeg-static (a native binary) stays external.
+    build: { externalizeDeps: { exclude: ["@watchparty/shared", "firebase", "@aws-sdk/client-s3"] } },
   },
   preload: {},
   renderer: {

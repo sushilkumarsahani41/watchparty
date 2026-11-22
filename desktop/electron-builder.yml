@@ -1,0 +1,25 @@
+appId: dev.watchparty.uploader
+productName: WatchParty Uploader
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# ffmpeg is a native binary: it can't execute from inside app.asar.
+asarUnpack:
+  - node_modules/ffmpeg-static/**
+mac:
+  target:
+    - target: dmg
+      arch: [arm64, x64]
+  category: public.app-category.video
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+# Note: ffmpeg-static downloads the binary for the OS it's installed on.
+# Build the Windows installer on Windows (or CI), the macOS dmg on a Mac.
