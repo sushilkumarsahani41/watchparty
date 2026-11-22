@@ -10,7 +10,7 @@ import {
   updateProfile,
   type User,
 } from "firebase/auth";
-import { ref, serverTimestamp, set } from "firebase/database";
+import { ref, runTransaction, serverTimestamp, set } from "firebase/database";
 import { paths } from "@watchparty/shared";
 import { firebase } from "./firebase";
 
@@ -36,9 +36,31 @@ function start() {
   try {
     onAuthStateChanged(firebase().auth, (user) => {
       emit(user ? { status: "signedIn", user } : { status: "signedOut", user: null });
+      if (user) void ensureUserProfile(user);
     });
   } catch (e) {
     emit({ status: "error", user: null, error: e instanceof Error ? e.message : String(e) });
+  }
+}
+
+/**
+ * Create users/{uid} if it's missing (e.g. the tab closed before signUp's write landed).
+ * A transaction so it never clobbers a profile signUp writes concurrently.
+ */
+async function ensureUserProfile(user: User) {
+  try {
+    await runTransaction(
+      ref(firebase().db, paths.user(user.uid)),
+      (current: unknown) =>
+        current ?? {
+          email: user.email ?? "",
+          displayName: displayNameOf(user),
+          createdAt: Date.now(),
+        },
+      { applyLocally: false },
+    );
+  } catch (e) {
+    console.warn("ensureUserProfile failed", e);
   }
 }
 
@@ -72,13 +94,13 @@ export async function signUp(email: string, password: string, displayName: strin
   const cred = await createUserWithEmailAndPassword(auth, email, password);
   const name = displayName.trim() || email.split("@")[0] || "Guest";
   await updateProfile(cred.user, { displayName: name });
+  // updateProfile does not trigger onAuthStateChanged; refresh subscribers right away.
+  emit({ status: "signedIn", user: cred.user });
   await set(ref(db, paths.user(cred.user.uid)), {
     email,
     displayName: name,
     createdAt: serverTimestamp(),
   });
-  // updateProfile does not trigger onAuthStateChanged; refresh subscribers.
-  emit({ status: "signedIn", user: cred.user });
 }
 
 export async function resetPassword(email: string) {
