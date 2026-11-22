@@ -12,9 +12,10 @@ seek, and there's a chat. Videos are transcoded on your own computer and stored 
 | Shared | `packages/shared/` | Data types, database paths, sync math + test vectors used by all apps |
 | Firebase | `firebase/` | Realtime Database security rules |
 
-**Use it:** web app at <https://watchparty.greatshark.in>. Android app and Mac uploader: see
+**Use it:** web app at <https://watchparty.greatshark.in>. Android app and the Mac / Windows uploader: see
 [Releases](https://github.com/sushilkumarsahani41/watchparty/releases) (Android: uninstall any older build
-first; Mac: the app isn't notarized, so right-click → Open the first time).
+first; Mac: the app isn't notarized, so right-click → Open the first time; Windows: the installer isn't
+code-signed, so SmartScreen asks once: More info → Run anyway).
 
 Design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). Changes since then and progress: [`PLAN.md`](PLAN.md).
 
@@ -117,7 +118,7 @@ cd desktop
 cp .env.example .env      # optional: dev defaults; the app's Settings screen can set everything
 pnpm dev                  # run from source
 pnpm dist:mac             # dmg (build on a Mac)
-pnpm dist:win             # NSIS installer (build on Windows: ffmpeg-static ships a per-OS binary)
+pnpm dist:win             # Windows x64 NSIS installer (works on a Mac too: fetches ffmpeg.exe first)
 ```
 Flow: sign in (same account as the apps) → pick a video → title, qualities (360p–1080p; tiers above the source
 are skipped), encoder (libx264, or Apple VideoToolbox / NVIDIA NVENC when available) → **Encode & upload** →

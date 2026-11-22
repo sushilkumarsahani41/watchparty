@@ -73,7 +73,7 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] Error states: room not found, player errors, reconnecting banner, auth error messages, upload retry/discard
 - [x] Reconnect: presence via onDisconnect + `.info/connected` (web + Android); Android background = offline
 - [x] README: Firebase, R2, web, Android (release signing, App Links), desktop, local testing
-- [x] Desktop packaging (electron-builder): mac dir build verified (315 MB app, 3 MB app code); dmg/exe targets configured
+- [x] Desktop packaging (electron-builder): mac dir build verified (315 MB app, 3 MB app code); dmg/exe targets configured; Windows x64 installer is built on the Mac (`dist:win` fetches ffmpeg.exe)
 - [x] Android release build (R8, 2.9 MB) verified on the emulator: login, deep link, sync, no crashes
 - [x] Web checked at phone width (no horizontal scroll)
 - [x] Real R2 upload run

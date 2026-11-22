@@ -11,8 +11,6 @@ release/
 next-env.d.ts
 
 # secrets
-.env
-.env.*
 !.env.example
 !.env.local.example
 *serviceAccount*.json
@@ -47,3 +45,4 @@ android/keystore.properties
 
 # Built apps (published as GitHub Releases, too large for the repo)
 releases/
+config.bat
