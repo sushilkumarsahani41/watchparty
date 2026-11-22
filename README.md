@@ -12,6 +12,10 @@ seek, and there's a chat. Videos are transcoded on your own computer and stored 
 | Shared | `packages/shared/` | Data types, database paths, sync math + test vectors used by all apps |
 | Firebase | `firebase/` | Realtime Database security rules |
 
+**Use it:** web app at <https://watchparty.greatshark.in>. Android app and Mac uploader: see
+[Releases](https://github.com/sushilkumarsahani41/watchparty/releases) (Android: uninstall any older build
+first; Mac: the app isn't notarized, so right-click → Open the first time).
+
 Design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). Changes since then and progress: [`PLAN.md`](PLAN.md).
 
 ## How sync works (short version)
