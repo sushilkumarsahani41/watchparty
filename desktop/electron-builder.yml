@@ -12,7 +12,9 @@ asarUnpack:
 mac:
   target:
     - target: dmg
-      arch: [arm64, x64]
+      # ffmpeg-static ships the binary for the machine it was installed on, so build each Mac arch on that arch
+      # (an x64 dmg built on Apple Silicon would contain an arm64 ffmpeg).
+      arch: [arm64]
   category: public.app-category.video
 win:
   target:
