@@ -22,6 +22,8 @@ const GUARD_MS = 1500;
 const BUFFERING_DEBOUNCE_MS = 400;
 /** Collapse rapid seeks (arrow key mashing) into one write. */
 const SEEK_WRITE_DEBOUNCE_MS = 250;
+/** Jumps smaller than this aren't user seeks (hls.js nudges over gaps/stalls on its own). */
+const MIN_USER_SEEK_SEC = 1;
 
 type GuardKind = "play" | "pause" | "seek";
 
@@ -72,6 +74,8 @@ export function useSync({
   presenceRef.current = presence;
 
   const guards = useRef<Record<GuardKind, number>>({ play: 0, pause: 0, seek: 0 });
+  /** A local seek is waiting to be written; don't pull the player back to the old position meanwhile. */
+  const localSeekPending = useRef(false);
   const arm = (kind: GuardKind) => {
     guards.current[kind] = performance.now() + GUARD_MS;
   };
@@ -111,7 +115,7 @@ export function useSync({
   const reconcile = useCallback(() => {
     const video = videoRef.current;
     const s = stateRef.current;
-    if (!video || !s || !unlockedRef.current) return;
+    if (!video || !s || !unlockedRef.current || localSeekPending.current) return;
     if (video.readyState < HTMLMediaElement.HAVE_METADATA) return;
 
     const shouldPlay = effectivePlaying(s, presenceRef.current);
@@ -164,6 +168,8 @@ export function useSync({
     if (!video) return;
 
     let seekWriteTimer: ReturnType<typeof setTimeout> | undefined;
+    /** Last settled playback position, to tell user seeks from tiny automatic nudges. */
+    let lastTime = video.currentTime;
     let bufferingTimer: ReturnType<typeof setTimeout> | undefined;
     let buffering = false;
 
@@ -195,14 +201,23 @@ export function useSync({
       if (s?.playing && !effectivePlaying(s, presenceRef.current)) return;
       writeState(false, video.currentTime, "pause-event");
     };
-    const onSeeked = () => {
+    // Write on `seeking` (it already carries the target), not `seeked`: a seek into unbuffered
+    // video only completes after loading, and reconcile would undo it before then.
+    const onSeeking = () => {
       if (consume("seek") || !unlockedRef.current) return;
+      if (Math.abs(video.currentTime - lastTime) < MIN_USER_SEEK_SEC) return;
+      localSeekPending.current = true;
       clearTimeout(seekWriteTimer);
       seekWriteTimer = setTimeout(() => {
+        localSeekPending.current = false;
+        lastTime = video.currentTime;
         const s = stateRef.current;
         // Keep the room's play/pause intent; only the position changed.
-        writeState(s?.playing ?? !video.paused, video.currentTime, "seeked-event");
+        writeState(s?.playing ?? !video.paused, video.currentTime, "seek");
       }, SEEK_WRITE_DEBOUNCE_MS);
+    };
+    const onTimeUpdate = () => {
+      if (!video.seeking) lastTime = video.currentTime;
     };
     const onWaiting = () => {
       if (!unlockedRef.current) return;
@@ -217,7 +232,9 @@ export function useSync({
 
     video.addEventListener("play", onPlay);
     video.addEventListener("pause", onPause);
-    video.addEventListener("seeked", onSeeked);
+    video.addEventListener("seeking", onSeeking);
+    video.addEventListener("timeupdate", onTimeUpdate);
+    video.addEventListener("seeked", onTimeUpdate);
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("stalled", onWaiting);
     video.addEventListener("canplay", onReady);
@@ -237,7 +254,10 @@ export function useSync({
       clearTimeout(bufferingTimer);
       video.removeEventListener("play", onPlay);
       video.removeEventListener("pause", onPause);
-      video.removeEventListener("seeked", onSeeked);
+      video.removeEventListener("seeking", onSeeking);
+      video.removeEventListener("timeupdate", onTimeUpdate);
+      video.removeEventListener("seeked", onTimeUpdate);
+      localSeekPending.current = false;
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("stalled", onWaiting);
       video.removeEventListener("canplay", onReady);

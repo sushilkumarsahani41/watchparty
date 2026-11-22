@@ -17,6 +17,9 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
     shared state, so the room rewinds to them instead of everyone skipping the part they missed.
   - A stall must last 400ms before it counts as buffering, so tiny hiccups don't pause everyone.
   - Holding Space doesn't auto-repeat play/pause.
+  - Rate correction stops as soon as drift crosses zero (prevents overshoot with the 5s heartbeat).
+  - User seeks are written on `seeking` (target known immediately), not `seeked`; jumps < 1s are ignored
+    as hls.js gap nudges.
 
 ## Milestones
 
@@ -38,10 +41,10 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] `serverTime.ts`, `useSync` (local writes, remote apply, echo guard, drift heartbeat, late-join button)
 - [x] Verified: play/pause/seek both ways within ~0.05s, no echo writes, late join (paused and playing) lands within 0.05s without writing
 
-### 4. Buffering-aware sync + quality menu + SyncStatus (web)
-- [ ] Presence buffering flag, gate on `effectivePlaying`, "X is buffering…"
-- [ ] `QualityMenu` (Auto / 360p–1080p, per viewer)
-- *Done when:* a throttled B pauses A and both resume together.
+### 4. Buffering-aware sync + quality menu + SyncStatus (web) ✅
+- [x] Presence buffering flag, gate on `effectivePlaying`, "X is buffering…"
+- [x] `QualityMenu` (Auto + available heights, per viewer, switches at next segment)
+- [x] Verified: B's stalled network pauses A with "Bob is buffering…" within ~1.5s; both resume 0.01s apart; B's seek into unbuffered video is kept
 
 ### 5. Android app
 - [ ] 5a. Project scaffold (Gradle wrapper, Compose, Firebase), login / signup / reset

@@ -41,7 +41,7 @@ export type DriftDecision =
  * - |drift| > 1.5s           -> seek to expected
  * - paused && |drift| > 0.3  -> seek to expected (invisible while paused)
  * - playing && |drift| > 0.3 -> nudge playbackRate (0.95 if ahead, 1.05 if behind)
- * - corrected && |drift| < 0.1 -> restore base rate
+ * - corrected && (|drift| < 0.1 or drift crossed zero) -> restore base rate
  * Between 0.1 and 0.3 the current rate is kept (hysteresis).
  */
 export function decideDrift(params: {
@@ -65,7 +65,9 @@ export function decideDrift(params: {
   }
 
   const isCorrecting = params.currentRate !== baseRate;
-  if (isCorrecting && (abs < RATE_RESTORE_THRESHOLD || !params.playing)) {
+  // Crossed the target (sped up but now ahead, or slowed down but now behind): stop before overshooting.
+  const overshot = (params.currentRate > baseRate && drift > 0) || (params.currentRate < baseRate && drift < 0);
+  if (isCorrecting && (abs < RATE_RESTORE_THRESHOLD || overshot || !params.playing)) {
     return { action: "rate", rate: baseRate };
   }
   return { action: "none" };

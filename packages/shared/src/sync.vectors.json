@@ -219,6 +219,44 @@
       "result": {
         "action": "none"
       }
+    },
+    {
+      "name": "restore when sped-up player overshoots ahead",
+      "input": {
+        "currentTime": 10.2,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 1.05
+      },
+      "result": {
+        "action": "rate",
+        "rate": 1
+      }
+    },
+    {
+      "name": "restore when slowed player overshoots behind",
+      "input": {
+        "currentTime": 9.8,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 0.95
+      },
+      "result": {
+        "action": "rate",
+        "rate": 1
+      }
+    },
+    {
+      "name": "keep speeding up while still behind in band",
+      "input": {
+        "currentTime": 9.8,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 1.05
+      },
+      "result": {
+        "action": "none"
+      }
     }
   ],
   "bufferingGate": [

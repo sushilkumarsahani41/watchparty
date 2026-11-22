@@ -78,6 +78,10 @@ export function VideoPlayer({
       });
       hls.attachMedia(video);
       hls.loadSource(src);
+      if (process.env.NODE_ENV !== "production") {
+        // Test hook: lets browser tests simulate a stalled network (stopLoad / startLoad).
+        (window as unknown as { __hls?: Hls }).__hls = hls;
+      }
       return () => {
         hls.destroy();
         hlsRef.current = null;
