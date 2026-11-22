@@ -44,3 +44,6 @@ android/.idea/
 release/
 android/keystore.properties
 .wrangler/
+
+# Built apps (published as GitHub Releases, too large for the repo)
+releases/
