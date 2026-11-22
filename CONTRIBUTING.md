@@ -1,6 +1,6 @@
 # WatchParty conventions
 
-Full spec: `WATCHPARTY_SPEC.md`. Ask before deviating from it.
+Full spec: `WATCHPARTY_SPEC.md`. Changes to it and progress: `PLAN.md` (keep it updated). Ask before deviating.
 
 - TypeScript strict. pnpm only. No `any` without a comment.
 - Shared types/paths/sync math live in `packages/shared`; never duplicate them.
@@ -12,5 +12,8 @@ Full spec: `WATCHPARTY_SPEC.md`. Ask before deviating from it.
 ## Layout
 - `packages/shared` — `@watchparty/shared`, consumed as TS source (web uses `transpilePackages`).
 - `web` — Next.js App Router, static client-only pages.
-- `desktop` — Electron uploader (milestone 5).
+- `android` — native Kotlin viewer app (Compose + Media3 + Firebase). Main viewer.
+- `desktop` — Electron uploader.
 - `firebase` — RTDB rules + config. Deploy with `firebase deploy --only database` from `firebase/`.
+- Sync math exists in TS (`packages/shared/src/sync.ts`) and Kotlin (android). Both must pass
+  `packages/shared/src/sync.vectors.json`; change the vectors and both implementations together.
