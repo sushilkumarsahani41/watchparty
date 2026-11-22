@@ -1,0 +1,14 @@
+// Cloudflare Workers static assets: serves the static export in ./out (pnpm build) at watchparty.greatshark.in.
+// Deploy: pnpm deploy (from web/). Room links (/room/<code>) are rewritten to the one room page by out/_redirects.
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "watchparty",
+  "compatibility_date": "2026-11-01",
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  },
+  "routes": [{ "pattern": "watchparty.greatshark.in", "custom_domain": true }],
+  "workers_dev": false
+}

@@ -15,6 +15,7 @@
     "roomMembers": {
       "$roomId": {
         ".read": "auth != null && root.child('roomMembers').child($roomId).child(auth.uid).exists()",
+        ".write": "auth != null && !newData.exists() && root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid",
         "$uid": {
           ".write": "auth != null && auth.uid === $uid"
         }
@@ -23,6 +24,7 @@
     "rooms": {
       "$roomId": {
         ".read": "auth != null && root.child('roomMembers').child($roomId).child(auth.uid).exists()",
+        ".write": "auth != null && !newData.exists() && root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid",
         "meta": {
           ".write": "auth != null && (!data.exists() || data.child('hostUid').val() === auth.uid)"
         },
@@ -31,7 +33,7 @@
         },
         "presence": {
           "$uid": {
-            ".write": "auth != null && auth.uid === $uid"
+            ".write": "auth != null && auth.uid === $uid && root.child('roomMembers').child($roomId).child(auth.uid).exists()"
           }
         }
       }
@@ -39,7 +41,10 @@
     "chats": {
       "$roomId": {
         ".read": "auth != null && root.child('roomMembers').child($roomId).child(auth.uid).exists()",
-        ".indexOn": ["ts"],
+        ".write": "auth != null && !newData.exists() && root.child('rooms').child($roomId).child('meta').child('hostUid').val() === auth.uid",
+        ".indexOn": [
+          "ts"
+        ],
         "$msgId": {
           ".write": "auth != null && !data.exists() && root.child('roomMembers').child($roomId).child(auth.uid).exists()",
           ".validate": "newData.hasChildren(['uid','name','text','ts']) && newData.child('uid').val() === auth.uid && newData.child('text').isString() && newData.child('text').val().length <= 1000"

@@ -122,7 +122,8 @@ R2 keys are stored encrypted with the OS keychain (`safeStorage`) in the app's s
 
 ## 6. Local development and testing
 ```sh
-pnpm emulators      # Firebase Auth + RTDB emulators (needs Java), project demo-watchparty
+pnpm emulators      # local Firebase Auth + RTDB emulators (needs Java); same project id as the apps so the
+                    # rules in firebase/database.rules.json apply (nothing touches the live project)
 pnpm -r typecheck   # all TS packages
 pnpm -r test        # shared sync tests (+ vectors), desktop ffmpeg/upload tests
 cd android && ./gradlew :app:testDebugUnitTest   # Kotlin sync math against the same vectors

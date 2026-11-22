@@ -1,6 +1,6 @@
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
-import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectsCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { CancelledError } from "./ffmpeg";
 
 export interface R2Config {
@@ -155,4 +155,53 @@ export async function uploadAll(client: S3Client, bucket: string, items: UploadI
   await runPool(items.filter((i) => i.kind === "segment"));
   await runPool(items.filter((i) => i.kind === "variant"));
   await runPool(items.filter((i) => i.kind === "master"));
+}
+
+/** Every key under a prefix (handles pagination). */
+async function listKeys(client: S3Client, bucket: string, prefix: string): Promise<Array<{ key: string; size: number; modified?: Date }>> {
+  const out: Array<{ key: string; size: number; modified?: Date }> = [];
+  let token: string | undefined;
+  do {
+    const r = await client.send(new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix, ContinuationToken: token }));
+    for (const o of r.Contents ?? []) if (o.Key) out.push({ key: o.Key, size: o.Size ?? 0, modified: o.LastModified });
+    token = r.IsTruncated ? r.NextContinuationToken : undefined;
+  } while (token);
+  return out;
+}
+
+export interface StoredVideo {
+  videoId: string;
+  bytes: number;
+  files: number;
+  /** Newest file time (ms). */
+  modifiedMs: number;
+}
+
+/** Uploaded videos in the bucket (one per videos/<id>/ folder). */
+export async function listVideos(client: S3Client, bucket: string): Promise<StoredVideo[]> {
+  const byId = new Map<string, StoredVideo>();
+  for (const o of await listKeys(client, bucket, "videos/")) {
+    const videoId = o.key.split("/")[1];
+    if (!videoId) continue;
+    const v = byId.get(videoId) ?? { videoId, bytes: 0, files: 0, modifiedMs: 0 };
+    v.bytes += o.size;
+    v.files += 1;
+    v.modifiedMs = Math.max(v.modifiedMs, o.modified?.getTime() ?? 0);
+    byId.set(videoId, v);
+  }
+  return [...byId.values()];
+}
+
+/** Delete every file of one uploaded video. Returns the number of files deleted. */
+export async function deleteVideo(client: S3Client, bucket: string, videoId: string): Promise<number> {
+  if (!/^[\w-]+$/.test(videoId)) throw new Error(`Invalid video id: ${videoId}`);
+  const keys = (await listKeys(client, bucket, `videos/${videoId}/`)).map((o) => o.key);
+  // DeleteObjects takes at most 1000 keys per call.
+  for (let i = 0; i < keys.length; i += 1000) {
+    const r = await client.send(
+      new DeleteObjectsCommand({ Bucket: bucket, Delete: { Objects: keys.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }),
+    );
+    if (r.Errors?.length) throw new Error(`Couldn't delete ${r.Errors.length} file(s): ${r.Errors[0]?.Message ?? "unknown error"}`);
+  }
+  return keys.length;
 }

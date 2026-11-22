@@ -33,6 +33,21 @@ export interface JobEvent {
   canRetry?: boolean;
 }
 
+/** One row in "My uploads": a room the user hosts and/or a video folder on R2. */
+export interface LibraryItem {
+  /** Set when there's a room (the room code). */
+  roomId?: string;
+  title: string;
+  source: "hls" | "youtube";
+  /** R2 folder; set for uploaded videos. */
+  videoId?: string;
+  inviteLink?: string;
+  createdAtMs: number;
+  /** Size on R2; 0 when there are no files (YouTube rooms, test rooms). */
+  bytes: number;
+  files: number;
+}
+
 export interface Account {
   email: string;
   displayName: string;
@@ -53,6 +68,11 @@ export interface WatchPartyApi {
     retry(): Promise<void>;
     cancel(): Promise<void>;
     onEvent(cb: (e: JobEvent) => void): () => void;
+  };
+  library: {
+    list(): Promise<LibraryItem[]>;
+    /** Deletes the video files on R2 (if any), then the room (if any). */
+    delete(item: Pick<LibraryItem, "roomId" | "videoId">): Promise<void>;
   };
   copy(text: string): Promise<void>;
   open(url: string): Promise<void>;

@@ -1,24 +1,15 @@
 "use client";
 
-import { get, push, ref, remove, serverTimestamp, set, update } from "firebase/database";
+import { get, ref, remove, serverTimestamp, set, update } from "firebase/database";
 import type { User } from "firebase/auth";
-import { paths, roomCreationWrites, type RoomMeta } from "@watchparty/shared";
+import { createRoomWithCode, paths, roomDeletionWrites, type NewRoom, type RoomMeta } from "@watchparty/shared";
 import { firebase } from "./firebase";
 
-/** Public multi-bitrate HLS stream used until the desktop uploader exists. */
+export { parseRoomInput, parseYouTubeId, formatRoomCode } from "@watchparty/shared";
+
+/** Public multi-bitrate HLS stream for trying the app without uploading anything. */
 export const TEST_HLS_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8";
 export const TEST_DURATION_SEC = 634;
-
-/** Room ids are RTDB push ids: 20 chars of [-_0-9A-Za-z]. */
-const ROOM_ID_RE = /^[-_0-9A-Za-z]{16,40}$/;
-
-/** Accepts a full invite link or a bare room id; returns the id or null. */
-export function parseRoomInput(input: string): string | null {
-  const trimmed = input.trim();
-  const fromLink = trimmed.match(/\/room\/([^/?#\s]+)/)?.[1];
-  const id = fromLink ?? trimmed;
-  return ROOM_ID_RE.test(id) ? id : null;
-}
 
 export function inviteLink(roomId: string): string {
   return `${window.location.origin}/room/${roomId}`;
@@ -40,30 +31,54 @@ export async function forgetRoom(roomId: string, uid: string) {
   ]);
 }
 
-/** Create a room: membership first (rules check it against existing data), then meta + state. */
-export async function createRoom(
-  user: User,
-  opts: { title: string; hlsUrl: string; videoId: string; durationSec: number },
-): Promise<string> {
+/** Create a room under a fresh 8-character room code. */
+export async function createRoom(user: User, room: Omit<NewRoom, "roomId" | "hostUid">): Promise<string> {
   const { db } = firebase();
-  const roomId = push(ref(db, "rooms")).key;
-  if (!roomId) throw new Error("Could not allocate a room id");
-  const writes = roomCreationWrites({ roomId, hostUid: user.uid, ...opts }, serverTimestamp());
-  await update(ref(db), writes.membership);
-  await update(ref(db), writes.content);
-  return roomId;
+  return createRoomWithCode(
+    { ...room, hostUid: user.uid },
+    { update: (w) => update(ref(db), w), exists: async (p) => (await get(ref(db, p))).exists() },
+    serverTimestamp(),
+  );
 }
 
 export function createTestRoom(user: User) {
   return createRoom(user, {
     title: "Test room: Big Buck Bunny",
+    source: "hls",
     hlsUrl: TEST_HLS_URL,
     videoId: "test-bbb",
     durationSec: TEST_DURATION_SEC,
   });
 }
 
-/** Read room metas for the "my rooms" list. Rooms that vanished are skipped. */
+/** Title (and a check that it exists and may be embedded) via YouTube oEmbed, which allows CORS. */
+export async function youTubeInfo(youtubeId: string): Promise<{ title: string }> {
+  const url = `https://www.youtube.com/oembed?format=json&url=${encodeURIComponent(`https://www.youtube.com/watch?v=${youtubeId}`)}`;
+  let res: Response;
+  try {
+    res = await fetch(url);
+  } catch {
+    // Network or blocked request: create the room anyway; the player reports real problems.
+    return { title: "YouTube video" };
+  }
+  if (res.status === 401 || res.status === 403) throw new Error("The owner of this video doesn't allow playing it outside YouTube.");
+  if (res.status === 404 || res.status === 400) throw new Error("That YouTube video doesn't exist or is private.");
+  if (!res.ok) return { title: "YouTube video" };
+  const data = (await res.json()) as { title?: string };
+  return { title: data.title?.trim() || "YouTube video" };
+}
+
+export async function createYouTubeRoom(user: User, youtubeId: string): Promise<string> {
+  const { title } = await youTubeInfo(youtubeId);
+  return createRoom(user, { title, source: "youtube", youtubeId, videoId: "", hlsUrl: "", durationSec: 0 });
+}
+
+/** Delete a room you host: everyone is removed and its chat is deleted. Uploaded files stay on R2. */
+export async function deleteRoom(roomId: string, uid: string) {
+  await update(ref(firebase().db), roomDeletionWrites(roomId, uid));
+}
+
+/** Read room metas for the "my rooms" list. Rooms that vanished (or were deleted) are skipped. */
 export async function loadRoomMetas(roomIds: string[]): Promise<Array<{ id: string; meta: RoomMeta }>> {
   const { db } = firebase();
   const results = await Promise.allSettled(

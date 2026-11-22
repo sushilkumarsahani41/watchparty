@@ -12,21 +12,20 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.net.URLEncoder
 
 object RoomRepository {
     const val CHAT_HISTORY = 100
     const val TEST_HLS_URL = "https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8"
     private const val TEST_DURATION_SEC = 634.0
 
-    /** RTDB push ids: 20 chars of [-_0-9A-Za-z]. */
-    private val ROOM_ID_RE = Regex("^[-_0-9A-Za-z]{16,40}$")
-
-    /** Accepts a full invite link (https://…/room/<id>, watchparty://room/<id>) or a bare id. */
-    fun parseRoomInput(input: String): String? {
-        val trimmed = input.trim()
-        val id = Regex("""(?:/room/|://room/)([^/?#\s]+)""").find(trimmed)?.groupValues?.get(1) ?: trimmed
-        return id.takeIf { ROOM_ID_RE.matches(it) }
-    }
+    /** Accepts an invite link, a room code (any case, spaces/dashes ok) or a legacy room id. */
+    fun parseRoomInput(input: String): String? = RoomInput.parseRoomInput(input)
 
     fun inviteLink(roomId: String) = "https://${BuildConfig.WEB_HOST}/room/$roomId"
 
@@ -42,31 +41,92 @@ object RoomRepository {
         runCatching { Fb.ref(Paths.userRoom(uid, roomId)).removeValue().await() }
     }
 
-    suspend fun createTestRoom(uid: String): String {
-        val roomId = Fb.ref("rooms").push().key ?: error("Could not allocate a room id")
-        // Membership first: rules check it against existing data.
-        join(roomId, uid)
+    /**
+     * Create a room under a fresh room code (same steps as createRoomWithCode in packages/shared/src/rooms.ts):
+     * membership first (rules check it against existing data); if the code is taken, undo and try another.
+     */
+    private suspend fun createRoom(uid: String, meta: Map<String, Any?>): String {
+        repeat(5) {
+            val roomId = RoomInput.generateCode()
+            join(roomId, uid)
+            if (Fb.ref(Paths.roomMeta(roomId)).get().await().exists()) {
+                forget(roomId, uid)
+                return@repeat
+            }
+            Fb.db.reference.updateChildren(
+                mapOf(
+                    Paths.roomMeta(roomId) to meta + mapOf("hostUid" to uid, "createdAt" to ServerValue.TIMESTAMP),
+                    Paths.roomState(roomId) to mapOf(
+                        "playing" to false,
+                        "position" to 0,
+                        "updatedAt" to ServerValue.TIMESTAMP,
+                        "rate" to 1,
+                        "rev" to 0,
+                        "by" to uid,
+                    ),
+                ),
+            ).await()
+            return roomId
+        }
+        error("Couldn't find a free room code. Try again.")
+    }
+
+    suspend fun createTestRoom(uid: String): String = createRoom(
+        uid,
+        mapOf(
+            "title" to "Test room: Big Buck Bunny",
+            "source" to "hls",
+            "videoId" to "test-bbb",
+            "hlsUrl" to TEST_HLS_URL,
+            "durationSec" to TEST_DURATION_SEC,
+        ),
+    )
+
+    /** Title (and a check that the video exists and may be embedded) via YouTube oEmbed. */
+    private suspend fun youTubeTitle(youtubeId: String): String = withContext(Dispatchers.IO) {
+        val url = URL(
+            "https://www.youtube.com/oembed?format=json&url=" +
+                URLEncoder.encode("https://www.youtube.com/watch?v=$youtubeId", "UTF-8"),
+        )
+        val conn = try {
+            (url.openConnection() as HttpURLConnection).apply { connectTimeout = 8000; readTimeout = 8000 }
+        } catch (_: Exception) {
+            return@withContext "YouTube video"
+        }
+        try {
+            when (val code = runCatching { conn.responseCode }.getOrDefault(-1)) {
+                401, 403 -> throw IllegalStateException("The owner of this video doesn't allow playing it outside YouTube.")
+                400, 404 -> throw IllegalStateException("That YouTube video doesn't exist or is private.")
+                200 -> JSONObject(conn.inputStream.bufferedReader().readText()).optString("title").trim().ifEmpty { "YouTube video" }
+                else -> { Log.w("WatchParty", "oEmbed returned $code"); "YouTube video" }
+            }
+        } finally {
+            conn.disconnect()
+        }
+    }
+
+    suspend fun createYouTubeRoom(uid: String, youtubeId: String): String = createRoom(
+        uid,
+        mapOf(
+            "title" to youTubeTitle(youtubeId),
+            "source" to "youtube",
+            "youtubeId" to youtubeId,
+            "videoId" to "",
+            "hlsUrl" to "",
+            "durationSec" to 0,
+        ),
+    )
+
+    /** Delete a room you host (rules allow only the host): room, members and chat, in one update. */
+    suspend fun deleteRoom(roomId: String, uid: String) {
         Fb.db.reference.updateChildren(
             mapOf(
-                Paths.roomMeta(roomId) to mapOf(
-                    "title" to "Test room: Big Buck Bunny",
-                    "hostUid" to uid,
-                    "createdAt" to ServerValue.TIMESTAMP,
-                    "videoId" to "test-bbb",
-                    "hlsUrl" to TEST_HLS_URL,
-                    "durationSec" to TEST_DURATION_SEC,
-                ),
-                Paths.roomState(roomId) to mapOf(
-                    "playing" to false,
-                    "position" to 0,
-                    "updatedAt" to ServerValue.TIMESTAMP,
-                    "rate" to 1,
-                    "rev" to 0,
-                    "by" to uid,
-                ),
+                Paths.room(roomId) to null,
+                Paths.roomMembers(roomId) to null,
+                Paths.chat(roomId) to null,
+                Paths.userRoom(uid, roomId) to null,
             ),
         ).await()
-        return roomId
     }
 
     fun userRoomIds(uid: String): Flow<List<String>> =
@@ -156,9 +216,10 @@ class PresenceController(private val roomId: String, private val user: AppUser) 
         }
     }
 
-    fun stop() {
+    /** @param roomGone the room was deleted: don't write a presence node back into it. */
+    fun stop(roomGone: Boolean = false) {
         connectedRef.removeEventListener(connectedListener)
         ref.onDisconnect().cancel()
-        ref.updateChildren(offline)
+        if (!roomGone) ref.updateChildren(offline)
     }
 }

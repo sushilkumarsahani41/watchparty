@@ -21,6 +21,10 @@ const api: WatchPartyApi = {
       return () => ipcRenderer.removeListener("job:event", listener);
     },
   },
+  library: {
+    list: () => ipcRenderer.invoke("library:list"),
+    delete: (item) => ipcRenderer.invoke("library:delete", item),
+  },
   copy: (text) => ipcRenderer.invoke("clipboard:write", text),
   open: (url) => ipcRenderer.invoke("shell:open", url),
 };

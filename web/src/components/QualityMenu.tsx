@@ -49,7 +49,7 @@ export function QualityMenu({
     <div ref={rootRef} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="rounded px-2 py-1 text-xs font-medium hover:bg-white/10"
+        className="h-7 rounded-md border border-white/15 px-2 text-[11px] font-semibold tracking-wide text-white/90 transition hover:bg-white/10"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-label="Quality"
@@ -57,7 +57,7 @@ export function QualityMenu({
         {label}
       </button>
       {open && (
-        <ul role="menu" className="absolute bottom-full right-0 mb-2 min-w-28 overflow-hidden rounded-lg border border-white/10 bg-zinc-900/95 py-1 text-sm shadow-xl">
+        <ul role="menu" className="absolute bottom-full right-0 mb-2 min-w-32 overflow-hidden rounded-xl border border-white/10 bg-surface-2/95 p-1 text-sm shadow-2xl backdrop-blur-md">
           {[{ index: -1, text: "Auto" }, ...options.map((o) => ({ index: o.index, text: `${o.height}p` }))].map((o) => (
             <li key={o.index}>
               <button
@@ -67,7 +67,7 @@ export function QualityMenu({
                   onSelect(o.index);
                   setOpen(false);
                 }}
-                className={`flex w-full items-center justify-between gap-4 px-3 py-1.5 text-left hover:bg-white/10 ${
+                className={`flex w-full items-center justify-between gap-4 rounded-lg px-3 py-1.5 text-left hover:bg-white/10 ${
                   selected === o.index ? "text-accent" : ""
                 }`}
               >

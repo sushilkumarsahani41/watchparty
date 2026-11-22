@@ -1,0 +1,141 @@
+{
+  "_comment": "Shared test cases for room input parsing. Run by vitest (rooms.test.ts) and Android JUnit (RoomInputVectorsTest.kt). Change both implementations together.",
+  "parseRoomInput": [
+    {
+      "input": "ABCD2345",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "abcd2345",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "  abcd-2345 ",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "AB CD 23 45",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "https://watchparty.greatshark.in/room/ABCD2345",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "https://watchparty.greatshark.in/room/abcd2345?x=1",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "watchparty://room/ABCD2345",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "Join me: https://watchparty.greatshark.in/room/ABCD2345",
+      "expected": "ABCD2345"
+    },
+    {
+      "input": "-P72tSwOnQkHGgU_z6oL",
+      "expected": "-P72tSwOnQkHGgU_z6oL"
+    },
+    {
+      "input": "https://watchparty.greatshark.in/room/-P72tSwOnQkHGgU_z6oL",
+      "expected": "-P72tSwOnQkHGgU_z6oL"
+    },
+    {
+      "input": "",
+      "expected": null
+    },
+    {
+      "input": "ABC2345",
+      "expected": null
+    },
+    {
+      "input": "ABCD23456",
+      "expected": null
+    },
+    {
+      "input": "hello world",
+      "expected": null
+    },
+    {
+      "input": "ABCD-23!5",
+      "expected": null
+    }
+  ],
+  "formatRoomCode": [
+    {
+      "input": "ABCD2345",
+      "expected": "ABCD-2345"
+    },
+    {
+      "input": "-P72tSwOnQkHGgU_z6oL",
+      "expected": "-P72tSwOnQkHGgU_z6oL"
+    }
+  ],
+  "parseYouTubeId": [
+    {
+      "input": "dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube.com/watch?feature=share&v=dQw4w9WgXcQ&t=42s",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "youtube.com/watch?v=dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://m.youtube.com/watch?v=dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://music.youtube.com/watch?v=dQw4w9WgXcQ&list=RD",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://youtu.be/dQw4w9WgXcQ?si=abc",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube.com/shorts/dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube.com/live/dQw4w9WgXcQ?feature=shared",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ",
+      "expected": "dQw4w9WgXcQ"
+    },
+    {
+      "input": "https://www.youtube.com/watch?v=dQw4w9WgXcQextra",
+      "expected": null
+    },
+    {
+      "input": "https://www.youtube.com/@channel",
+      "expected": null
+    },
+    {
+      "input": "https://vimeo.com/123456",
+      "expected": null
+    },
+    {
+      "input": "https://example.com/watch?v=dQw4w9WgXcQ",
+      "expected": null
+    },
+    {
+      "input": "",
+      "expected": null
+    }
+  ]
+}

@@ -66,7 +66,8 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] R2 parallel upload (6), segments → variants → master, retry ×5 with backoff, resume via HeadObject, room creation, invite link; settings screen with keychain-encrypted R2 keys
 - [x] Verified end to end with a local S3 stand-in for R2 + Firebase emulators: 40s 1080p MP4 → 4 renditions →
       33 objects with correct types/cache headers → room → plays and syncs in two web browsers.
-- [ ] Real Cloudflare R2 run (needs bucket + API token)
+- [x] Real Cloudflare R2 run: bucket `watchparty`, public at `https://watchparty-media.greatshark.in`, CORS set;
+      20s clip encoded, uploaded, served publicly, resumed, deleted.
 
 ### 7. Polish + release (in progress)
 - [x] Error states: room not found, player errors, reconnecting banner, auth error messages, upload retry/discard
@@ -75,13 +76,35 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] Desktop packaging (electron-builder): mac dir build verified (315 MB app, 3 MB app code); dmg/exe targets configured
 - [x] Android release build (R8, 2.9 MB) verified on the emulator: login, deep link, sync, no crashes
 - [x] Web checked at phone width (no horizontal scroll)
-- [ ] Deploy web (needs your choice of host + login)
-- [ ] Real R2 upload run (needs bucket + API token)
-- [ ] Release keystore + assetlinks.json (needs your web domain)
+- [x] Real R2 upload run
+- [x] Release keystore (`android/watchparty-release.jks` + `keystore.properties`, both gitignored; back them up)
+      and `web/public/.well-known/assetlinks.json` with its fingerprint
+- [ ] Deploy web to Cloudflare at `watchparty.greatshark.in` (needs `wrangler login`)
+- [ ] Add `watchparty.greatshark.in` to Firebase Auth authorized domains and the R2 CORS list
 - [ ] Confirm Android video on a real phone (emulator decoder shows glitches)
-- Minor: two Compose deprecation warnings (password field, Slider overload) left as is.
 
-## Needs from you (when we get there)
-- Cloudflare R2 bucket + API keys (milestone 6)
-- Web domain for invite links / App Links (milestone 5b/7)
-- Android release signing key (milestone 7)
+### 8. Room codes, delete, YouTube parties, redesign (requested after milestone 7) ✅
+Spec changes (asked for by you):
+- **Room codes:** new rooms get an 8-character code (alphabet without 0/O/1/I) as their room id; invite links carry it
+  (`/room/ABCD2345`). Join accepts the code in any case, with spaces/dashes, or a link. Old push-id rooms still work.
+  Shared: `generateRoomCode`, `parseRoomInput`, `createRoomWithCode` (retries a taken code); Kotlin port
+  (`RoomInput.kt`) runs the same `rooms.vectors.json`.
+- **Delete:** host-only. Rules: the host may delete `rooms/{id}`, `roomMembers/{id}` and `chats/{id}` (deletes only);
+  presence writes now require membership (a deleted room can't get presence written back). Shared
+  `roomDeletionWrites`. Web + Android: delete in the room list; members inside see "Room not found".
+  Uploader: "My uploads" tab lists hosted rooms + R2 video folders (with sizes, including folders no room points
+  at) and deletes files then the room. Verified with rules enforced (non-host deletes refused).
+- **YouTube parties:** `meta.source = "youtube"` + `youtubeId` (title via oEmbed). Web: `YouTubeMedia` makes the
+  IFrame player look like a `<video>` so `useSync` is unchanged. Android: `SyncPlayer` interface; `SyncEngine`
+  drives `ExoSyncPlayer` or `YouTubeSyncPlayer` (WebView + JS bridge). YouTube honours 0.95/1.05 (measured
+  1.048/0.952), so the sync rules are unchanged. A paused YouTube player only counts as ready once ≥2s is loaded
+  ahead (else the buffering gate loops). Verified web↔Android: start, pause, ±10s, play; drift ≤ ~0.05s.
+- **Redesign:** one token set (web `globals.css`, uploader `styles.css`, Android `Theme.kt`); new player controls
+  (thin seek bar, smaller buttons, Android double-tap ±10s; fixes the portrait overlap of −10s/play with the
+  bottom bar); new rooms/room/login screens on web + Android; uploader topbar, tabs, done screen with the code.
+- **Hosting:** web is a static export served by Cloudflare Workers static assets (`web/wrangler.jsonc`, custom
+  domain `watchparty.greatshark.in`); `/room/*` is rewritten to the one room page (`public/_redirects`).
+- Local testing: `pnpm emulators` now uses the real project id so the emulator applies our rules to the same
+  database namespace the apps use (before, local tests silently ran without rules).
+- Android emulator note: WebView crashes on this AVD with `-gpu host`/default (no GLES version); use
+  `-gpu swiftshader_indirect`. Not an app issue.

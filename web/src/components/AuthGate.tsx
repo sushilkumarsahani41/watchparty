@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, type ReactNode } from "react";
-import { usePathname, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import type { User } from "firebase/auth";
 import { useAuth } from "@/lib/useAuth";
 
@@ -9,25 +9,28 @@ import { useAuth } from "@/lib/useAuth";
 export function AuthGate({ children }: { children: (user: User) => ReactNode }) {
   const auth = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
 
   useEffect(() => {
     if (auth.status === "signedOut") {
-      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+      // window.location, not usePathname: /room/<code> is served by the static /room page.
+      router.replace(`/login?next=${encodeURIComponent(window.location.pathname)}`);
     }
-  }, [auth.status, pathname, router]);
+  }, [auth.status, router]);
 
   if (auth.status === "error") return <FullScreenMessage title="Setup error" body={auth.error} />;
   if (auth.status !== "signedIn") return <FullScreenMessage title="Loading…" />;
   return <>{children(auth.user)}</>;
 }
 
-export function FullScreenMessage({ title, body }: { title: string; body?: string }) {
+export function FullScreenMessage({ title, body, action }: { title: string; body?: string; action?: ReactNode }) {
+  const loading = title.endsWith("…");
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">
-      <div className="max-w-md text-center">
-        <p className="text-lg font-medium text-zinc-200">{title}</p>
-        {body && <p className="mt-2 text-sm text-zinc-400">{body}</p>}
+      <div className="flex max-w-md flex-col items-center text-center">
+        {loading && <span className="mb-4 size-6 animate-spin rounded-full border-2 border-white/15 border-t-accent" />}
+        <p className={`font-medium ${loading ? "text-sm text-muted" : "text-lg text-fg"}`}>{title}</p>
+        {body && <p className="mt-2 text-sm text-muted">{body}</p>}
+        {action && <div className="mt-6">{action}</div>}
       </div>
     </main>
   );

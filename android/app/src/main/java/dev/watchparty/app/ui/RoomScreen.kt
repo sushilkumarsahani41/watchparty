@@ -63,7 +63,15 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.watchparty.app.data.CHAT_MAX_LENGTH
 import dev.watchparty.app.data.ChatMessage
 import dev.watchparty.app.data.Presence
+import dev.watchparty.app.data.RoomInput
 import dev.watchparty.app.data.RoomRepository
+import android.content.ClipData
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.text.font.FontFamily
 import java.text.DateFormat
 import java.util.Date
 
@@ -72,8 +80,12 @@ fun RoomScreen(vm: RoomViewModel, onBack: () -> Unit) {
     val status by vm.status.collectAsState()
     when (val s = status) {
         RoomStatus.Joining -> FullScreenMessage("Joining room…")
-        RoomStatus.NotFound -> FullScreenMessage("Room not found", "This invite link is wrong or the room was deleted.")
-        is RoomStatus.Error -> FullScreenMessage("Couldn't open this room", s.message)
+        RoomStatus.NotFound -> FullScreenMessage("Room not found", "This room code is wrong, or the host deleted the room.") {
+            SecondaryButton("Back to your rooms", onClick = onBack, modifier = Modifier.width(220.dp))
+        }
+        is RoomStatus.Error -> FullScreenMessage("Couldn't open this room", s.message) {
+            SecondaryButton("Back to your rooms", onClick = onBack, modifier = Modifier.width(220.dp))
+        }
         is RoomStatus.Ready -> RoomContent(vm, s.meta.title, onBack)
     }
 }
@@ -88,6 +100,14 @@ private fun RoomContent(vm: RoomViewModel, title: String, onBack: () -> Unit) {
     val presence by vm.presence.collectAsState()
     val messages by vm.messages.collectAsState()
     val connected by vm.connected.collectAsState()
+    val clipboard = remember { context.getSystemService(android.content.ClipboardManager::class.java) }
+    var codeCopied by remember { mutableStateOf(false) }
+    LaunchedEffect(codeCopied) {
+        if (codeCopied) {
+            kotlinx.coroutines.delay(1500)
+            codeCopied = false
+        }
+    }
 
     // Foreground/background -> presence + local playback.
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -143,17 +163,47 @@ private fun RoomContent(vm: RoomViewModel, title: String, onBack: () -> Unit) {
     }
 
     Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back") }
-            Text(title, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-            if (!connected) Text("Reconnecting…", color = WpColors.Buffering, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 6.dp))
-            IconButton(onClick = {
-                val send = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_TEXT, "Watch \"$title\" with me: ${RoomRepository.inviteLink(vm.roomId)}")
+        Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 10.dp, top = 4.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", modifier = Modifier.size(22.dp)) }
+            Column(Modifier.weight(1f)) {
+                Text(title, fontWeight = FontWeight.SemiBold, fontSize = 15.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (!connected) {
+                    Text("Reconnecting…", color = WpColors.Buffering, fontSize = 12.sp)
+                } else {
+                    Text(
+                        if (codeCopied) "Code copied" else RoomInput.format(vm.roomId),
+                        color = WpColors.Accent, fontSize = 12.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace, letterSpacing = 1.5.sp,
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .clickable {
+                                clipboard.setPrimaryClip(ClipData.newPlainText("Room code", vm.roomId))
+                                codeCopied = true
+                            }
+                            .testTag("roomCode"),
+                    )
                 }
-                context.startActivity(Intent.createChooser(send, "Share invite link"))
-            }, modifier = Modifier.testTag("share")) { Icon(Icons.Filled.Share, "Share invite link") }
+            }
+            Row(
+                Modifier
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(Brush.verticalGradient(listOf(Color(0xFF9B74FB), Color(0xFF7C4FF0))))
+                    .clickable {
+                        val send = Intent(Intent.ACTION_SEND).apply {
+                            type = "text/plain"
+                            putExtra(
+                                Intent.EXTRA_TEXT,
+                                "Watch \"$title\" with me on WatchParty: ${RoomRepository.inviteLink(vm.roomId)}\nRoom code: ${RoomInput.format(vm.roomId)}",
+                            )
+                        }
+                        context.startActivity(Intent.createChooser(send, "Invite friends"))
+                    }
+                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                    .testTag("share"),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Filled.Share, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                Text("Invite", color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp, modifier = Modifier.padding(start = 6.dp))
+            }
         }
         PlayerPane(vm, fullscreen = false, onToggleFullscreen = toggleFullscreen, modifier = Modifier.fillMaxWidth().aspectRatio(16f / 9f))
         Participants(presence, vm.user.uid)
@@ -166,33 +216,47 @@ private fun Participants(presence: Map<String, Presence>, selfUid: String) {
     val people = presence.entries.sortedWith(
         compareBy<Map.Entry<String, Presence>>({ !it.value.online }, { it.key != selfUid }, { it.value.name.lowercase() }),
     )
-    Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp)) {
-        Text(
-            "WATCHING · ${people.count { it.value.online }} ONLINE",
-            color = WpColors.Faint, fontSize = 11.sp, fontWeight = FontWeight.Medium,
-        )
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(Modifier.size(6.dp).background(WpColors.Online, CircleShape))
+            Text(
+                "WATCHING · ${people.count { it.value.online }} ONLINE",
+                color = WpColors.Faint, fontSize = 11.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 1.2.sp,
+                modifier = Modifier.padding(start = 8.dp),
+            )
+        }
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 8.dp)) {
             items(people, key = { it.key }) { (uid, p) ->
                 Row(
-                    Modifier.border(1.dp, WpColors.SurfaceHigh, RoundedCornerShape(50)).padding(horizontal = 10.dp, vertical = 4.dp),
+                    Modifier
+                        .clip(RoundedCornerShape(50))
+                        .background(WpColors.Surface2)
+                        .border(1.dp, WpColors.Line, RoundedCornerShape(50))
+                        .padding(start = 4.dp, end = 12.dp, top = 4.dp, bottom = 4.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        Modifier.size(8.dp).background(
-                            when {
-                                !p.online -> Color(0xFF52525B)
-                                p.buffering -> WpColors.Buffering
-                                else -> WpColors.Online
-                            },
-                            CircleShape,
-                        ),
-                    )
-                    Text(
-                        p.name + if (uid == selfUid) " (you)" else "",
-                        color = if (p.online) Color(0xFFE4E4E7) else WpColors.Faint,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(start = 6.dp),
-                    )
+                    Box {
+                        Box(Modifier.size(24.dp).background(WpColors.SurfaceHigh, CircleShape), contentAlignment = Alignment.Center) {
+                            Text(p.name.take(1).uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Box(
+                            Modifier
+                                .align(Alignment.BottomEnd)
+                                .size(9.dp)
+                                .background(WpColors.Surface2, CircleShape)
+                                .padding(1.5.dp)
+                                .background(
+                                    when {
+                                        !p.online -> Color(0xFF52525B)
+                                        p.buffering -> WpColors.Buffering
+                                        else -> WpColors.Online
+                                    },
+                                    CircleShape,
+                                ),
+                        )
+                    }
+                    Text(p.name, color = if (p.online) WpColors.Text else WpColors.Faint, fontSize = 12.sp, modifier = Modifier.padding(start = 8.dp))
+                    if (uid == selfUid) Text(" you", color = WpColors.Faint, fontSize = 12.sp)
                 }
             }
         }
@@ -216,7 +280,7 @@ private fun Chat(
     }
 
     Column(modifier.fillMaxWidth().background(WpColors.Background)) {
-        Box(Modifier.fillMaxWidth().padding(top = 2.dp).background(WpColors.SurfaceHigh).padding(top = 1.dp))
+        Box(Modifier.fillMaxWidth().height(1.dp).background(WpColors.Line))
         LazyColumn(
             state = listState,
             modifier = Modifier.weight(1f).fillMaxWidth().padding(horizontal = 12.dp),
@@ -224,7 +288,12 @@ private fun Chat(
             contentPadding = androidx.compose.foundation.layout.PaddingValues(vertical = 10.dp),
         ) {
             if (messages.isEmpty()) {
-                item { Text("No messages yet. Say hi 👋", color = WpColors.Faint, fontSize = 14.sp, modifier = Modifier.fillMaxWidth().padding(24.dp)) }
+                item {
+                    Column(Modifier.fillMaxWidth().padding(top = 36.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text("No messages yet", color = WpColors.Muted, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                        Text("Say hi to everyone watching 👋", color = WpColors.Faint, fontSize = 12.sp, modifier = Modifier.padding(top = 4.dp))
+                    }
+                }
             }
             items(messages, key = { it.id }) { m ->
                 val mine = m.uid == selfUid
@@ -241,7 +310,7 @@ private fun Chat(
                             .padding(top = 2.dp)
                             .widthIn(max = 300.dp)
                             .background(
-                                if (mine) WpColors.AccentStrong else WpColors.SurfaceHigh,
+                                if (mine) WpColors.AccentStrong else WpColors.Surface2,
                                 RoundedCornerShape(16.dp, 16.dp, if (mine) 4.dp else 16.dp, if (mine) 16.dp else 4.dp),
                             )
                             .padding(horizontal = 12.dp, vertical = 7.dp),
@@ -251,15 +320,16 @@ private fun Chat(
         }
         error?.let { Text(it, color = WpColors.Error, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 12.dp)) }
         Row(Modifier.fillMaxWidth().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
+            WpTextField(
                 value = text,
                 onValueChange = { text = it.take(CHAT_MAX_LENGTH) },
-                placeholder = { Text("Message") },
-                shape = RoundedCornerShape(50),
+                placeholder = "Send a message",
+                singleLine = false,
                 maxLines = 4,
+                shape = RoundedCornerShape(24.dp),
                 modifier = Modifier.weight(1f).testTag("chatInput"),
             )
-            Spacer(Modifier.size(6.dp))
+            Spacer(Modifier.size(8.dp))
             IconButton(
                 onClick = {
                     val body = text
@@ -272,7 +342,11 @@ private fun Chat(
                 },
                 enabled = text.isNotBlank(),
                 modifier = Modifier.testTag("send"),
-            ) { Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = if (text.isNotBlank()) WpColors.Accent else WpColors.Faint) }
+                colors = androidx.compose.material3.IconButtonDefaults.iconButtonColors(
+                    containerColor = WpColors.AccentStrong,
+                    disabledContainerColor = WpColors.Surface2,
+                ),
+            ) { Icon(Icons.AutoMirrored.Filled.Send, "Send", tint = if (text.isNotBlank()) Color.White else WpColors.Faint, modifier = Modifier.size(20.dp)) }
         }
     }
 }

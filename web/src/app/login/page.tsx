@@ -1,7 +1,9 @@
 "use client";
 
 import { Suspense, useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
+import { Wordmark } from "@/components/Icons";
+import { useGo } from "@/lib/nav";
 import { authErrorMessage, resetPassword, signIn, signUp, useAuth } from "@/lib/useAuth";
 
 type Mode = "login" | "signup" | "reset";
@@ -13,7 +15,7 @@ function safeNext(next: string | null): string {
 
 function LoginForm() {
   const auth = useAuth();
-  const router = useRouter();
+  const go = useGo();
   const next = safeNext(useSearchParams().get("next"));
 
   const [mode, setMode] = useState<Mode>("login");
@@ -25,8 +27,8 @@ function LoginForm() {
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
-    if (auth.status === "signedIn") router.replace(next);
-  }, [auth.status, next, router]);
+    if (auth.status === "signedIn") go(next, { replace: true });
+  }, [auth.status, next, go]);
 
   function switchMode(m: Mode) {
     setMode(m);
@@ -59,20 +61,24 @@ function LoginForm() {
   return (
     <main className="flex min-h-dvh items-center justify-center px-4 py-10">
       <div className="w-full max-w-sm">
-        <h1 className="mb-1 text-center text-2xl font-semibold tracking-tight">
-          Watch<span className="text-accent">Party</span>
-        </h1>
-        <p className="mb-8 text-center text-sm text-zinc-400">Watch together, in sync.</p>
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Wordmark size={34} />
+          <p className="mt-3 text-sm text-muted">Watch anything together, perfectly in sync.</p>
+        </div>
 
-        <form
-          onSubmit={onSubmit}
-          className="space-y-4 rounded-2xl border border-white/10 bg-white/[0.03] p-6 shadow-xl"
-        >
-          <h2 className="text-lg font-medium">{title}</h2>
+        <form onSubmit={onSubmit} className="card space-y-4 p-6 shadow-2xl shadow-black/40 sm:p-7">
+          <div>
+            <h1 className="text-xl font-semibold tracking-tight">{title}</h1>
+            <p className="mt-1 text-sm text-faint">
+              {mode === "login"
+                ? "Sign in to join your rooms."
+                : mode === "signup"
+                  ? "One account for the web, Android and the uploader."
+                  : "We'll email you a link to set a new password."}
+            </p>
+          </div>
 
-          {auth.status === "error" && (
-            <p className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">{auth.error}</p>
-          )}
+          {auth.status === "error" && <p className="rounded-xl bg-red-500/10 px-3 py-2 text-sm text-danger">{auth.error}</p>}
 
           {mode === "signup" && (
             <Field label="Display name">
@@ -82,20 +88,13 @@ function LoginForm() {
                 autoComplete="nickname"
                 maxLength={40}
                 placeholder="What friends will see"
-                className={inputCls}
+                className="field"
               />
             </Field>
           )}
 
           <Field label="Email">
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              autoComplete="email"
-              className={inputCls}
-            />
+            <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" className="field" />
           </Field>
 
           {mode !== "reset" && (
@@ -107,34 +106,30 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete={mode === "signup" ? "new-password" : "current-password"}
-                className={inputCls}
+                className="field"
               />
             </Field>
           )}
 
-          {error && <p className="text-sm text-red-300">{error}</p>}
+          {error && <p className="text-sm text-danger">{error}</p>}
           {notice && <p className="text-sm text-emerald-300">{notice}</p>}
 
-          <button
-            type="submit"
-            disabled={busy || auth.status === "error"}
-            className="w-full rounded-lg bg-accent-strong px-4 py-2.5 font-medium text-white transition hover:bg-accent disabled:opacity-50"
-          >
+          <button type="submit" disabled={busy || auth.status === "error"} className="btn-primary w-full">
             {busy ? "Please wait…" : cta}
           </button>
 
-          <div className="flex justify-between text-sm text-zinc-400">
+          <div className="flex justify-between pt-1 text-sm text-muted">
             {mode === "login" ? (
               <>
-                <button type="button" onClick={() => switchMode("signup")} className="hover:text-zinc-100">
+                <button type="button" onClick={() => switchMode("signup")} className="transition hover:text-fg">
                   Create account
                 </button>
-                <button type="button" onClick={() => switchMode("reset")} className="hover:text-zinc-100">
+                <button type="button" onClick={() => switchMode("reset")} className="transition hover:text-fg">
                   Forgot password?
                 </button>
               </>
             ) : (
-              <button type="button" onClick={() => switchMode("login")} className="hover:text-zinc-100">
+              <button type="button" onClick={() => switchMode("login")} className="transition hover:text-fg">
                 ← Back to log in
               </button>
             )}
@@ -145,13 +140,10 @@ function LoginForm() {
   );
 }
 
-const inputCls =
-  "w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-accent";
-
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
     <label className="block">
-      <span className="mb-1 block text-sm text-zinc-300">{label}</span>
+      <span className="mb-1.5 block text-[13px] font-medium text-muted">{label}</span>
       {children}
     </label>
   );

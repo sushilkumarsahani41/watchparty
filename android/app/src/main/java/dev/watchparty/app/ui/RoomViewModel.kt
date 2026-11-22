@@ -12,6 +12,7 @@ import androidx.media3.common.TrackSelectionOverride
 import androidx.media3.common.Tracks
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
+import dev.watchparty.app.BuildConfig
 import dev.watchparty.app.data.AppUser
 import dev.watchparty.app.data.ChatMessage
 import dev.watchparty.app.data.Fb
@@ -22,8 +23,11 @@ import dev.watchparty.app.data.PresenceController
 import dev.watchparty.app.data.RoomMeta
 import dev.watchparty.app.data.RoomRepository
 import dev.watchparty.app.data.snapshots
+import dev.watchparty.app.sync.ExoSyncPlayer
 import dev.watchparty.app.sync.ServerTime
 import dev.watchparty.app.sync.SyncEngine
+import dev.watchparty.app.sync.SyncPlayer
+import dev.watchparty.app.sync.YouTubeSyncPlayer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -67,33 +71,29 @@ class RoomViewModel(app: Application, val roomId: String, val user: AppUser) : A
     private val _playerError = MutableStateFlow<String?>(null)
     val playerError: StateFlow<String?> = _playerError.asStateFlow()
 
-    val player: ExoPlayer = ExoPlayer.Builder(app).build()
+    /** Created once the room's meta says which kind of video it is. */
+    private val _player = MutableStateFlow<SyncPlayer?>(null)
+    val player: StateFlow<SyncPlayer?> = _player.asStateFlow()
+
     private var engine: SyncEngine? = null
     private var presenceController: PresenceController? = null
-    private var mediaLoaded = false
+    private var roomGone = false
     val selfBuffering = MutableStateFlow(false)
 
     init {
         ServerTime.start()
-        player.addListener(object : Player.Listener {
-            override fun onTracksChanged(tracks: Tracks) {
-                _qualities.value = tracks.groups.withIndex()
-                    .filter { (_, g) -> g.type == C.TRACK_TYPE_VIDEO }
-                    .flatMap { (gi, g) ->
-                        (0 until g.length).filter { g.isTrackSupported(it) }.map { ti ->
-                            QualityOption(g.getTrackFormat(ti).height, gi, ti)
-                        }
-                    }
-                    .filter { it.height > 0 }
-                    .distinctBy { it.height }
-                    .sortedByDescending { it.height }
-            }
-
-            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
-                _playerError.value = "This video can't be played (${error.errorCodeName})."
-            }
-        })
         viewModelScope.launch { joinAndSubscribe() }
+    }
+
+    private fun markGone() {
+        if (roomGone) return
+        roomGone = true
+        _status.value = RoomStatus.NotFound
+        engine?.setActive(false)
+        // Stop presence now: writing it after the room is gone would leave a stray node behind.
+        presenceController?.stop(roomGone = true)
+        presenceController = null
+        viewModelScope.launch { RoomRepository.forget(roomId, user.uid) }
     }
 
     private suspend fun joinAndSubscribe() {
@@ -104,14 +104,18 @@ class RoomViewModel(app: Application, val roomId: String, val user: AppUser) : A
             return
         }
         val onError: (Throwable) -> Unit = { e ->
-            // After "not found" we drop membership, so later permission errors are expected.
-            if (_status.value != RoomStatus.NotFound) _status.value = RoomStatus.Error(e.message ?: "Connection error")
+            when {
+                // After "not found" we drop membership, so later permission errors are expected.
+                roomGone -> Unit
+                // Losing access to a room we were in: the host deleted it (members go with the room).
+                _status.value is RoomStatus.Ready && e.message?.contains("permission", ignoreCase = true) == true -> markGone()
+                else -> _status.value = RoomStatus.Error(e.message ?: "Connection error")
+            }
         }
         viewModelScope.launch {
             RoomRepository.meta(roomId).catch { onError(it) }.collect { meta ->
                 if (meta == null) {
-                    _status.value = RoomStatus.NotFound
-                    RoomRepository.forget(roomId, user.uid)
+                    markGone()
                 } else {
                     _status.value = RoomStatus.Ready(meta)
                     startPlayback(meta)
@@ -139,28 +143,59 @@ class RoomViewModel(app: Application, val roomId: String, val user: AppUser) : A
     }
 
     private fun startPlayback(meta: RoomMeta) {
-        if (mediaLoaded) return
-        mediaLoaded = true
-        player.setMediaItem(
-            MediaItem.Builder().setUri(meta.hlsUrl).setMimeType(MimeTypes.APPLICATION_M3U8).build(),
-        )
-        player.prepare()
+        if (_player.value != null) return
+        val p: SyncPlayer = if (meta.isYouTube) {
+            YouTubeSyncPlayer(getApplication(), meta.youtubeId!!, BuildConfig.WEB_HOST).also { yt ->
+                yt.onError = { _playerError.value = it }
+            }
+        } else {
+            createExo(meta.hlsUrl)
+        }
+        _player.value = p
 
         presenceController = PresenceController(roomId, user).also { it.start() }
         engine = SyncEngine(
-            player = player,
+            player = p,
             scope = viewModelScope,
             durationFallbackSec = { meta.durationSec },
             writeState = { playing, pos, prevRev -> RoomRepository.writeState(roomId, user.uid, playing, pos, prevRev) },
             publishBuffering = { b ->
                 selfBuffering.value = b
-                presenceController?.setBuffering(b)
+                if (!roomGone) presenceController?.setBuffering(b)
             },
         ).also { e ->
             e.onPresence(_presence.value)
             e.onState(_state.value)
         }
     }
+
+    private fun createExo(url: String): ExoSyncPlayer {
+        val exo = ExoPlayer.Builder(getApplication()).build()
+        exo.addListener(object : Player.Listener {
+            override fun onTracksChanged(tracks: Tracks) {
+                _qualities.value = tracks.groups.withIndex()
+                    .filter { (_, g) -> g.type == C.TRACK_TYPE_VIDEO }
+                    .flatMap { (gi, g) ->
+                        (0 until g.length).filter { g.isTrackSupported(it) }.map { ti ->
+                            QualityOption(g.getTrackFormat(ti).height, gi, ti)
+                        }
+                    }
+                    .filter { it.height > 0 }
+                    .distinctBy { it.height }
+                    .sortedByDescending { it.height }
+            }
+
+            override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                _playerError.value = "This video can't be played (${error.errorCodeName})."
+            }
+        })
+        exo.setMediaItem(MediaItem.Builder().setUri(url).setMimeType(MimeTypes.APPLICATION_M3U8).build())
+        exo.prepare()
+        return ExoSyncPlayer(exo)
+    }
+
+    /** Height of the video currently playing (uploads only), for the "Auto (720p)" label. */
+    fun activeHeight(): Int = (_player.value as? ExoSyncPlayer)?.exo?.videoFormat?.height ?: 0
 
     // --- UI actions ---
 
@@ -170,20 +205,22 @@ class RoomViewModel(app: Application, val roomId: String, val user: AppUser) : A
 
     /** App moved to/from background. */
     fun setForeground(fg: Boolean) {
+        if (roomGone) return
         presenceController?.setForeground(fg)
         engine?.setActive(fg)
     }
 
     @OptIn(UnstableApi::class)
     fun selectQuality(option: QualityOption?) {
-        val params = player.trackSelectionParameters.buildUpon()
+        val exo = (_player.value as? ExoSyncPlayer)?.exo ?: return
+        val params = exo.trackSelectionParameters.buildUpon()
         if (option == null) {
             params.clearOverridesOfType(C.TRACK_TYPE_VIDEO)
         } else {
-            val group = player.currentTracks.groups.getOrNull(option.groupIndex) ?: return
+            val group = exo.currentTracks.groups.getOrNull(option.groupIndex) ?: return
             params.setOverrideForType(TrackSelectionOverride(group.mediaTrackGroup, option.trackIndex))
         }
-        player.trackSelectionParameters = params.build()
+        exo.trackSelectionParameters = params.build()
         _selectedQuality.value = option?.height
     }
 
@@ -201,7 +238,7 @@ class RoomViewModel(app: Application, val roomId: String, val user: AppUser) : A
 
     override fun onCleared() {
         engine?.release()
-        presenceController?.stop()
-        player.release()
+        presenceController?.stop(roomGone)
+        _player.value?.release()
     }
 }

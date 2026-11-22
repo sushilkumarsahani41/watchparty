@@ -10,7 +10,9 @@ object Paths {
     fun user(uid: String) = "users/$uid"
     fun userRooms(uid: String) = "userRooms/$uid"
     fun userRoom(uid: String, roomId: String) = "userRooms/$uid/$roomId"
+    fun roomMembers(roomId: String) = "roomMembers/$roomId"
     fun roomMember(roomId: String, uid: String) = "roomMembers/$roomId/$uid"
+    fun room(roomId: String) = "rooms/$roomId"
     fun roomMeta(roomId: String) = "rooms/$roomId/meta"
     fun roomState(roomId: String) = "rooms/$roomId/state"
     fun roomPresence(roomId: String) = "rooms/$roomId/presence"
@@ -26,10 +28,15 @@ data class RoomMeta(
     val title: String,
     val hostUid: String,
     val createdAt: Long,
+    /** "hls" (uploaded) or "youtube". Missing in rooms created before YouTube support = "hls". */
+    val source: String,
     val videoId: String,
     val hlsUrl: String,
+    val youtubeId: String?,
     val durationSec: Double,
-)
+) {
+    val isYouTube get() = source == "youtube" && !youtubeId.isNullOrBlank()
+}
 
 data class PlaybackState(
     val playing: Boolean,
@@ -66,10 +73,12 @@ fun DataSnapshot.toRoomMeta(): RoomMeta? {
         title = str("title") ?: "Untitled",
         hostUid = str("hostUid") ?: "",
         createdAt = long("createdAt") ?: 0L,
+        source = str("source") ?: "hls",
         videoId = str("videoId") ?: "",
-        hlsUrl = str("hlsUrl") ?: return null,
+        hlsUrl = str("hlsUrl") ?: "",
+        youtubeId = str("youtubeId"),
         durationSec = num("durationSec") ?: 0.0,
-    )
+    ).takeIf { it.isYouTube || it.hlsUrl.isNotBlank() }
 }
 
 fun DataSnapshot.toPlaybackState(): PlaybackState? {

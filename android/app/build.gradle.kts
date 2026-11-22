@@ -73,6 +73,10 @@ android {
                 "syncVectors",
                 rootProject.file("../packages/shared/src/sync.vectors.json").absolutePath,
             )
+            it.systemProperty(
+                "roomVectors",
+                rootProject.file("../packages/shared/src/rooms.vectors.json").absolutePath,
+            )
         }
     }
 }

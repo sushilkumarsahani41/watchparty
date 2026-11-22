@@ -1,7 +1,7 @@
 import { deleteApp, initializeApp, type FirebaseApp } from "firebase/app";
 import { connectAuthEmulator, getAuth, signInWithEmailAndPassword, signOut as fbSignOut, type Auth } from "firebase/auth";
-import { connectDatabaseEmulator, getDatabase, push, ref, serverTimestamp, update, type Database } from "firebase/database";
-import { roomCreationWrites, type NewRoom } from "@watchparty/shared";
+import { connectDatabaseEmulator, get, getDatabase, ref, serverTimestamp, update, type Database } from "firebase/database";
+import { createRoomWithCode, paths, roomDeletionWrites, type NewRoom, type RoomMeta } from "@watchparty/shared";
 import type { Settings } from "./settings";
 
 let current: { app: FirebaseApp; auth: Auth; db: Database; key: string } | null = null;
@@ -54,17 +54,46 @@ export function currentUid(): string | null {
   return current?.auth.currentUser?.uid ?? null;
 }
 
-/** Same writes as the web app (shared helper): membership first, then meta + initial state. */
+/** Same writes as the web app (shared helper): a fresh room code, membership first, then meta + state. */
 export async function createRoom(s: Settings, room: Omit<NewRoom, "roomId" | "hostUid">): Promise<string> {
   const { auth, db } = await fb(s);
   const uid = auth.currentUser?.uid;
   if (!uid) throw new Error("Sign in first.");
-  const roomId = push(ref(db, "rooms")).key;
-  if (!roomId) throw new Error("Could not allocate a room id");
-  const writes = roomCreationWrites({ ...room, roomId, hostUid: uid }, serverTimestamp());
-  await update(ref(db), writes.membership);
-  await update(ref(db), writes.content);
-  return roomId;
+  return createRoomWithCode(
+    { ...room, source: "hls", hostUid: uid },
+    { update: (w) => update(ref(db), w), exists: async (p) => (await get(ref(db, p))).exists() },
+    serverTimestamp(),
+  );
+}
+
+export interface HostedRoom {
+  roomId: string;
+  meta: RoomMeta;
+}
+
+/** Rooms the signed-in user hosts (from their "my rooms" list), newest first. */
+export async function listHostedRooms(s: Settings): Promise<HostedRoom[]> {
+  const { auth, db } = await fb(s);
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Sign in first.");
+  const ids = Object.keys(((await get(ref(db, paths.userRooms(uid)))).val() ?? {}) as Record<string, unknown>);
+  const rooms = await Promise.all(
+    ids.map(async (roomId) => {
+      // Rooms deleted elsewhere are no longer readable: skip them.
+      const snap = await get(ref(db, paths.roomMeta(roomId))).catch(() => null);
+      const meta = snap?.exists() ? (snap.val() as RoomMeta) : null;
+      return meta && meta.hostUid === uid ? { roomId, meta } : null;
+    }),
+  );
+  return rooms.filter((r): r is HostedRoom => r !== null).sort((a, b) => (b.meta.createdAt ?? 0) - (a.meta.createdAt ?? 0));
+}
+
+/** Delete a room the signed-in user hosts (rules allow only the host). */
+export async function deleteRoom(s: Settings, roomId: string): Promise<void> {
+  const { auth, db } = await fb(s);
+  const uid = auth.currentUser?.uid;
+  if (!uid) throw new Error("Sign in first.");
+  await update(ref(db), roomDeletionWrites(roomId, uid));
 }
 
 export function authErrorMessage(e: unknown): string {

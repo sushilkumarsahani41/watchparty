@@ -1,9 +1,21 @@
 @import "tailwindcss";
 
+/* WatchParty design tokens: keep in sync with desktop/src/renderer/styles.css and android ui/Theme.kt. */
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --color-accent: oklch(0.72 0.17 290);
-  --color-accent-strong: oklch(0.62 0.2 290);
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --color-bg: #0c0b11;
+  --color-surface: #15141c;
+  --color-surface-2: #1c1a25;
+  --color-surface-3: #252231;
+  --color-line: rgb(255 255 255 / 0.07);
+  --color-line-strong: rgb(255 255 255 / 0.12);
+  --color-fg: #f4f3f8;
+  --color-muted: #a7a4b4;
+  --color-faint: #6f6c7d;
+  --color-accent: #a78bfa;
+  --color-accent-strong: #8b5cf6;
+  --color-danger: #f9a8a8;
 }
 
 html {
@@ -11,6 +23,46 @@ html {
 }
 
 body {
-  background: oklch(0.16 0.01 280);
-  color: var(--color-zinc-100);
+  background:
+    radial-gradient(1100px 480px at 50% -220px, rgb(139 92 246 / 0.13), transparent 70%),
+    var(--color-bg);
+  background-attachment: fixed;
+  color: var(--color-fg);
+}
+
+/* Reusable component classes (Tailwind v4 @utility, so they work with variants and @apply). */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:translate-y-px disabled:pointer-events-none disabled:opacity-40;
+}
+@utility btn-primary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:translate-y-px disabled:pointer-events-none disabled:opacity-40 text-white shadow-[0_6px_18px_rgb(124_58_237/0.28),inset_0_1px_0_rgb(255_255_255/0.18)];
+  background: linear-gradient(180deg, #9b74fb, #7c4ff0);
+  &:hover {
+    background: linear-gradient(180deg, #a685fc, #8659f3);
+  }
+}
+@utility btn-secondary {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:translate-y-px disabled:pointer-events-none disabled:opacity-40 border border-line-strong bg-surface-2 text-fg hover:bg-surface-3;
+}
+@utility btn-ghost {
+  @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition active:translate-y-px disabled:pointer-events-none disabled:opacity-40 text-muted hover:bg-white/5 hover:text-fg;
+}
+@utility field {
+  @apply w-full rounded-xl border border-line-strong bg-black/25 px-3.5 py-2.5 text-sm text-fg outline-none transition placeholder:text-faint focus:border-accent focus:ring-4 focus:ring-accent-strong/15;
+}
+@utility card {
+  @apply rounded-2xl border border-line bg-surface;
+}
+
+/* Thin, modern scrollbars for the chat. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(255 255 255 / 0.12) transparent;
+}
+
+@keyframes wave {
+  0%, 100% { transform: rotate(0deg); }
+  15%, 45% { transform: rotate(14deg); }
+  30% { transform: rotate(-8deg); }
+  60% { transform: rotate(0deg); }
 }

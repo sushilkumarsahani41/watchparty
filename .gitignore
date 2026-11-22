@@ -43,3 +43,4 @@ android/.idea/
 *.aab
 release/
 android/keystore.properties
+.wrangler/

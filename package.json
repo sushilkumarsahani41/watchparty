@@ -4,7 +4,7 @@
   "packageManager": "pnpm@11.22.0",
   "scripts": {
     "dev": "pnpm --filter @watchparty/web dev",
-    "emulators": "cd firebase && firebase emulators:start --only auth,database --project demo-watchparty",
+    "emulators": "cd firebase && firebase emulators:start --only auth,database --project watchparty-o222t",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test"

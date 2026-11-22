@@ -1,0 +1,2 @@
+# Every room link is served by the one static room page; it reads the code from the URL.
+/room/*  /room  200

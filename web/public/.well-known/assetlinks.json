@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "dev.watchparty.app",
+      "sha256_cert_fingerprints": ["A4:B3:61:77:BE:AD:44:A9:52:B4:4D:01:FA:2B:8F:F1:30:EF:73:FD:FA:9A:18:E0:19:1F:4F:E1:D0:3A:8E:A8"]
+    }
+  }
+]

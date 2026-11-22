@@ -3,8 +3,8 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { mockClient } from "aws-sdk-client-mock";
-import { HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { planUpload, uploadAll } from "../src/main/r2Upload";
+import { DeleteObjectsCommand, HeadObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { deleteVideo, listVideos, planUpload, uploadAll } from "../src/main/r2Upload";
 
 const s3 = mockClient(S3Client);
 const notFound = Object.assign(new Error("NotFound"), { name: "NotFound", $metadata: { httpStatusCode: 404 } });
@@ -92,5 +92,51 @@ describe("r2 upload", () => {
     } finally {
       await rm(dir, { recursive: true, force: true });
     }
+  });
+});
+
+describe("r2 library", () => {
+  beforeEach(() => s3.reset());
+  const client = () => new S3Client({ region: "auto", credentials: { accessKeyId: "a", secretAccessKey: "b" } });
+
+  it("groups files into videos across pages", async () => {
+    s3.on(ListObjectsV2Command, { ContinuationToken: undefined }).resolves({
+      Contents: [
+        { Key: "videos/a/master.m3u8", Size: 10, LastModified: new Date(1000) },
+        { Key: "videos/a/720p/seg_00000.ts", Size: 100, LastModified: new Date(3000) },
+      ],
+      IsTruncated: true,
+      NextContinuationToken: "p2",
+    });
+    s3.on(ListObjectsV2Command, { ContinuationToken: "p2" }).resolves({
+      Contents: [{ Key: "videos/b/master.m3u8", Size: 5, LastModified: new Date(2000) }],
+      IsTruncated: false,
+    });
+    const v = (await listVideos(client(), "bkt")).sort((x, y) => x.videoId.localeCompare(y.videoId));
+    expect(v).toEqual([
+      { videoId: "a", bytes: 110, files: 2, modifiedMs: 3000 },
+      { videoId: "b", bytes: 5, files: 1, modifiedMs: 2000 },
+    ]);
+  });
+
+  it("deletes every file of a video in batches of 1000", async () => {
+    const keys = Array.from({ length: 1500 }, (_, i) => ({ Key: `videos/a/seg_${i}.ts`, Size: 1 }));
+    s3.on(ListObjectsV2Command).resolves({ Contents: keys, IsTruncated: false });
+    s3.on(DeleteObjectsCommand).resolves({});
+    expect(await deleteVideo(client(), "bkt", "a")).toBe(1500);
+    const calls = s3.commandCalls(DeleteObjectsCommand);
+    expect(calls.map((c) => c.args[0].input.Delete?.Objects?.length)).toEqual([1000, 500]);
+    expect(s3.commandCalls(ListObjectsV2Command)[0]!.args[0].input.Prefix).toBe("videos/a/");
+  });
+
+  it("refuses ids that could escape the video folder", async () => {
+    await expect(deleteVideo(client(), "bkt", "../x")).rejects.toThrow(/Invalid video id/);
+    await expect(deleteVideo(client(), "bkt", "")).rejects.toThrow(/Invalid video id/);
+  });
+
+  it("reports per-file delete errors", async () => {
+    s3.on(ListObjectsV2Command).resolves({ Contents: [{ Key: "videos/a/x.ts", Size: 1 }] });
+    s3.on(DeleteObjectsCommand).resolves({ Errors: [{ Key: "videos/a/x.ts", Message: "AccessDenied" }] });
+    await expect(deleteVideo(client(), "bkt", "a")).rejects.toThrow(/AccessDenied/);
   });
 });

@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { PlaybackState, PresenceMap } from "@watchparty/shared";
-import { formatTime } from "./VideoPlayer";
+import { formatTime } from "@/lib/format";
 
 /** Small pill over the video: who we're waiting for, or who just paused/played/seeked. */
 export function SyncStatus({
@@ -39,10 +39,10 @@ export function SyncStatus({
   }, [state, selfUid]);
 
   let text: string | null = null;
-  let tone = "bg-black/70 text-zinc-100";
+  let tone = "border-white/10 bg-black/60 text-white";
   if (waitingFor.length) {
     text = `${listNames(waitingFor)} ${waitingFor.length === 1 ? "is" : "are"} buffering…`;
-    tone = "bg-amber-500/90 text-black";
+    tone = "border-amber-300/30 bg-amber-400/90 text-black";
   } else if (selfBuffering) {
     text = "Buffering…";
   } else if (toast) {
@@ -51,8 +51,11 @@ export function SyncStatus({
   if (!text) return null;
 
   return (
-    <div className="pointer-events-none absolute left-1/2 top-3 z-10 -translate-x-1/2" role="status" aria-live="polite">
-      <div className={`whitespace-nowrap rounded-full px-3 py-1 text-xs font-medium shadow-lg ${tone}`}>{text}</div>
+    <div className="pointer-events-none absolute left-1/2 top-3 z-20 -translate-x-1/2" role="status" aria-live="polite">
+      <div className={`flex items-center gap-2 whitespace-nowrap rounded-full border px-3.5 py-1.5 text-xs font-medium shadow-lg backdrop-blur-md ${tone}`}>
+        {(waitingFor.length > 0 || selfBuffering) && <span className="size-3 animate-spin rounded-full border-2 border-current border-t-transparent" />}
+        {text}
+      </div>
     </div>
   );
 }

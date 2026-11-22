@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ref, serverTimestamp, set } from "firebase/database";
 import {
   SEEK_THRESHOLD,
@@ -13,6 +13,7 @@ import {
   type PresenceMap,
 } from "@watchparty/shared";
 import { firebase } from "./firebase";
+import { HAVE_FUTURE_DATA, HAVE_METADATA, type MediaLike } from "./media";
 import { serverNow, startServerTime } from "./serverTime";
 
 const HEARTBEAT_MS = 5000;
@@ -28,15 +29,14 @@ const MIN_USER_SEEK_SEC = 1;
 type GuardKind = "play" | "pause" | "seek";
 
 interface Params {
-  videoRef: RefObject<HTMLVideoElement | null>;
+  /** The player (a <video> element or YouTubeMedia); null until it exists. */
+  media: MediaLike | null;
   roomId: string;
   uid: string;
   state: PlaybackState | null;
   presence: PresenceMap;
   durationSec: number;
   setBuffering: (b: boolean) => void;
-  /** True once the <video> element is mounted (re-runs event wiring). */
-  mounted: boolean;
 }
 
 export interface SyncApi {
@@ -54,14 +54,13 @@ export interface SyncApi {
  * are wrapped in a guard so their media events aren't written back (no echo loops).
  */
 export function useSync({
-  videoRef,
+  media,
   roomId,
   uid,
   state,
   presence,
   durationSec,
   setBuffering,
-  mounted,
 }: Params): SyncApi {
   const [unlocked, setUnlocked] = useState(false);
   const [selfBuffering, setSelfBuffering] = useState(false);
@@ -89,9 +88,9 @@ export function useSync({
   };
 
   const duration = useCallback(() => {
-    const d = videoRef.current?.duration;
+    const d = media?.duration;
     return d && Number.isFinite(d) ? d : durationSec;
-  }, [videoRef, durationSec]);
+  }, [media, durationSec]);
 
   const writeState = useCallback(
     (playing: boolean, position: number, reason: string) => {
@@ -116,10 +115,10 @@ export function useSync({
 
   /** Bring the local player in line with shared state + buffering gate. */
   const reconcile = useCallback(() => {
-    const video = videoRef.current;
+    const video = media;
     const s = stateRef.current;
     if (!video || !s || !unlockedRef.current || localSeekPending.current) return;
-    if (video.readyState < HTMLMediaElement.HAVE_METADATA) return;
+    if (video.readyState < HAVE_METADATA) return;
 
     const shouldPlay = effectivePlaying(s, presenceRef.current);
     const gated = s.playing && !shouldPlay;
@@ -156,7 +155,7 @@ export function useSync({
       arm("pause");
       video.pause();
     }
-  }, [videoRef, duration]);
+  }, [media, duration]);
 
   useEffect(() => startServerTime(), []);
 
@@ -167,7 +166,7 @@ export function useSync({
 
   // Heartbeat + media event wiring.
   useEffect(() => {
-    const video = videoRef.current;
+    const video = media;
     if (!video) return;
 
     let seekWriteTimer: ReturnType<typeof setTimeout> | undefined;
@@ -229,7 +228,7 @@ export function useSync({
     };
     const onReady = () => {
       clearTimeout(bufferingTimer);
-      if (video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) publishBuffering(false);
+      if (video.readyState >= HAVE_FUTURE_DATA) publishBuffering(false);
     };
     const onMetadata = () => reconcile();
 
@@ -247,7 +246,7 @@ export function useSync({
 
     const heartbeat = setInterval(() => {
       // Safety net: never leave a stale buffering flag up once data is there.
-      if (buffering && video.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) publishBuffering(false);
+      if (buffering && video.readyState >= HAVE_FUTURE_DATA) publishBuffering(false);
       reconcile();
     }, HEARTBEAT_MS);
 
@@ -269,7 +268,7 @@ export function useSync({
       video.removeEventListener("loadedmetadata", onMetadata);
       if (buffering) setBuffering(false);
     };
-  }, [mounted, videoRef, reconcile, writeState, duration, setBuffering]);
+  }, [media, reconcile, writeState, duration, setBuffering]);
 
   const unlock = useCallback(() => {
     unlockedRef.current = true;

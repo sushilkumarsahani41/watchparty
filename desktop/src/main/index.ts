@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import ffmpegStatic from "ffmpeg-static";
 import { hlsUrlFor, inviteLinkFor } from "@watchparty/shared";
-import type { JobEvent, JobInput, PickedFile } from "../shared/api";
+import type { JobEvent, JobInput, LibraryItem, PickedFile } from "../shared/api";
 import { CancelledError, detectEncoders, pickRenditions, probe, transcode, type Encoder } from "./ffmpeg";
-import { authErrorMessage, createRoom, currentUid, signIn, signOut } from "./firebase";
-import { planUpload, r2Client, uploadAll } from "./r2Upload";
+import { authErrorMessage, createRoom, currentUid, deleteRoom, listHostedRooms, signIn, signOut } from "./firebase";
+import { deleteVideo, listVideos, planUpload, r2Client, uploadAll } from "./r2Upload";
 import { loadSettings, missingSettings, saveSettings, type Settings } from "./settings";
 
 /** ffmpeg-static lives inside app.asar in packaged builds; binaries must run from the unpacked copy. */
@@ -209,6 +209,43 @@ function registerIpc() {
     job = null;
     await cleanup(j);
     emit({ phase: "cancelled", progress: 0, message: "Cancelled." });
+  });
+
+  ipcMain.handle("library:list", async (): Promise<LibraryItem[]> => {
+    const s = await loadSettings();
+    const client = r2Client({ accountId: s.r2AccountId, accessKeyId: s.r2AccessKeyId, secretAccessKey: s.r2SecretAccessKey, bucket: s.r2Bucket });
+    const [rooms, videos] = await Promise.all([listHostedRooms(s), listVideos(client, s.r2Bucket)]);
+    const stored = new Map(videos.map((v) => [v.videoId, v]));
+    const items: LibraryItem[] = rooms.map(({ roomId, meta }) => {
+      const v = meta.videoId ? stored.get(meta.videoId) : undefined;
+      if (v) stored.delete(v.videoId);
+      return {
+        roomId,
+        title: meta.title,
+        source: meta.source ?? "hls",
+        videoId: v?.videoId,
+        inviteLink: inviteLinkFor(s.webBaseUrl, roomId),
+        createdAtMs: meta.createdAt ?? 0,
+        bytes: v?.bytes ?? 0,
+        files: v?.files ?? 0,
+      };
+    });
+    // Video folders no room of yours points at: unfinished uploads, or rooms deleted from the apps.
+    for (const v of stored.values()) {
+      items.push({ title: "Video without a room", source: "hls", videoId: v.videoId, createdAtMs: v.modifiedMs, bytes: v.bytes, files: v.files });
+    }
+    return items.sort((a, b) => b.createdAtMs - a.createdAtMs);
+  });
+
+  ipcMain.handle("library:delete", async (_e, item: Pick<LibraryItem, "roomId" | "videoId">) => {
+    if (job?.videoId && job.videoId === item.videoId) throw new Error("This video is still being uploaded.");
+    const s = await loadSettings();
+    // Files first: if that fails the room still exists and the delete can be retried.
+    if (item.videoId) {
+      const client = r2Client({ accountId: s.r2AccountId, accessKeyId: s.r2AccessKeyId, secretAccessKey: s.r2SecretAccessKey, bucket: s.r2Bucket });
+      await deleteVideo(client, s.r2Bucket, item.videoId);
+    }
+    if (item.roomId) await deleteRoom(s, item.roomId);
   });
 
   ipcMain.handle("clipboard:write", (_e, text: string) => clipboard.writeText(text));

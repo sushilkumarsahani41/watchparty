@@ -3,6 +3,8 @@ packages:
   - web
   - desktop
 allowBuilds:
+  esbuild: true
+  workerd: true
   '@firebase/util': false
   electron-winstaller: false
   ffmpeg-static: true

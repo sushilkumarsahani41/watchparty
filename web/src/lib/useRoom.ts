@@ -55,6 +55,8 @@ export function useRoom(roomId: string, user: User): RoomData & { setBuffering: 
   const patch = (p: Partial<RoomData>) => setData((d) => ({ ...d, ...p }));
   const bufferingRef = useRef(false);
   const joinedRef = useRef(false);
+  /** The room turned out not to exist (or was deleted while we were in it). */
+  const goneRef = useRef(false);
 
   // 1. Join, then subscribe to room data.
   useEffect(() => {
@@ -64,7 +66,16 @@ export function useRoom(roomId: string, user: User): RoomData & { setBuffering: 
     const fail = (e: Error) => {
       if (cancelled) return;
       // After a "not found" we drop membership, so later permission errors are expected.
-      setData((d) => (d.status === "notFound" ? d : { ...d, status: "error", error: e.message }));
+      // Losing access to a room we were in means the host deleted it (members go with the room).
+      if (/permission/i.test(e.message)) {
+        goneRef.current = true;
+        void forgetRoom(roomId, user.uid);
+      }
+      setData((d) =>
+        d.status === "notFound" || (d.status === "ready" && /permission/i.test(e.message))
+          ? { ...d, status: "notFound" }
+          : { ...d, status: "error", error: e.message },
+      );
     };
 
     (async () => {
@@ -82,6 +93,7 @@ export function useRoom(roomId: string, user: User): RoomData & { setBuffering: 
           ref(db, paths.roomMeta(roomId)),
           (snap) => {
             if (!snap.exists()) {
+              goneRef.current = true;
               patch({ status: "notFound" });
               void forgetRoom(roomId, user.uid);
               return;
@@ -136,7 +148,8 @@ export function useRoom(roomId: string, user: User): RoomData & { setBuffering: 
     return () => {
       unsub();
       void onDisconnect(presenceRef).cancel().catch(() => {});
-      void update(presenceRef, { online: false, buffering: false, lastSeen: serverTimestamp() }).catch(() => {});
+      // A deleted room must not get a presence node written back into it.
+      if (!goneRef.current) void update(presenceRef, { online: false, buffering: false, lastSeen: serverTimestamp() }).catch(() => {});
     };
   }, [ready, roomId, user]);
 

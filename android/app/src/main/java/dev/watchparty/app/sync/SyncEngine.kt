@@ -1,10 +1,6 @@
 package dev.watchparty.app.sync
 
 import android.util.Log
-import androidx.media3.common.C
-import androidx.media3.common.PlaybackParameters
-import androidx.media3.common.Player
-import androidx.media3.exoplayer.ExoPlayer
 import dev.watchparty.app.BuildConfig
 import dev.watchparty.app.data.PlaybackState
 import dev.watchparty.app.data.Presence
@@ -25,10 +21,11 @@ import kotlinx.coroutines.launch
  * [userPause] / [userSeekTo] which write shared state directly. Programmatic corrections never
  * write, so echo loops are impossible without guard flags.
  *
- * Must be used on the main thread (ExoPlayer and Firebase callbacks both run there).
+ * Works with any [SyncPlayer] (ExoPlayer for uploads, the YouTube player for YouTube rooms).
+ * Must be used on the main thread (player and Firebase callbacks both run there).
  */
 class SyncEngine(
-    private val player: ExoPlayer,
+    private val player: SyncPlayer,
     private val scope: CoroutineScope,
     private val durationFallbackSec: () -> Double,
     /** Write rooms/{id}/state. */
@@ -65,22 +62,20 @@ class SyncEngine(
     private val _selfBuffering = MutableStateFlow(false)
     val selfBuffering: StateFlow<Boolean> = _selfBuffering.asStateFlow()
 
-    private val listener = object : Player.Listener {
-        override fun onPlaybackStateChanged(playbackState: Int) {
-            when (playbackState) {
-                Player.STATE_BUFFERING -> {
-                    if (bufferingJob?.isActive != true) {
-                        bufferingJob = scope.launch {
-                            delay(BUFFERING_DEBOUNCE_MS)
-                            setBuffering(true)
-                        }
+    private val listener: (SyncPlayer.Phase) -> Unit = { phase ->
+        when (phase) {
+            SyncPlayer.Phase.Buffering -> {
+                if (bufferingJob?.isActive != true) {
+                    bufferingJob = scope.launch {
+                        delay(BUFFERING_DEBOUNCE_MS)
+                        setBuffering(true)
                     }
                 }
-                Player.STATE_READY, Player.STATE_ENDED, Player.STATE_IDLE -> {
-                    bufferingJob?.cancel()
-                    setBuffering(false)
-                    if (playbackState == Player.STATE_READY) reconcile()
-                }
+            }
+            else -> {
+                bufferingJob?.cancel()
+                setBuffering(false)
+                if (phase == SyncPlayer.Phase.Ready) reconcile()
             }
         }
     }
@@ -92,13 +87,13 @@ class SyncEngine(
         heartbeat = scope.launch {
             while (isActive) {
                 delay(HEARTBEAT_MS)
-                if (_selfBuffering.value && player.playbackState == Player.STATE_READY) setBuffering(false)
+                if (_selfBuffering.value && player.phase == SyncPlayer.Phase.Ready) setBuffering(false)
                 reconcile()
                 if (BuildConfig.DEBUG) {
                     val drift = state?.let { s ->
                         positionSec() - SyncMath.expectedPosition(s.playing, s.position, s.updatedAt, s.rate, ServerTime.now(), durationSec())
                     }
-                    debug("tick pos=${"%.2f".format(positionSec())} drift=${drift?.let { "%+.3f".format(it) }} playing=${player.isPlaying} rate=${player.playbackParameters.speed} buffering=${_selfBuffering.value}")
+                    debug("tick pos=${"%.2f".format(positionSec())} drift=${drift?.let { "%+.3f".format(it) }} playing=${player.isPlaying} rate=${player.speed} buffering=${_selfBuffering.value}")
                 }
             }
         }
@@ -138,7 +133,7 @@ class SyncEngine(
 
     fun userSeekTo(targetSec: Double) {
         val clamped = targetSec.coerceIn(0.0, durationSec().takeIf { it > 0 } ?: Double.MAX_VALUE)
-        player.seekTo((clamped * 1000).toLong())
+        player.seekTo(clamped)
         // Collapse rapid taps into one write; hold off reconcile so it doesn't pull us back meanwhile.
         localSeekPending = true
         seekWriteJob?.cancel()
@@ -152,18 +147,15 @@ class SyncEngine(
 
     // --- Applying remote state ---
 
-    private fun positionSec() = player.currentPosition / 1000.0
+    private fun positionSec() = player.positionSec
 
-    private fun durationSec(): Double {
-        val d = player.duration
-        return if (d != C.TIME_UNSET && d > 0) d / 1000.0 else durationFallbackSec()
-    }
+    private fun durationSec(): Double = player.durationSec.takeIf { it > 0 } ?: durationFallbackSec()
 
     /** Bring the local player in line with shared state + buffering gate. */
     fun reconcile() {
         val s = state ?: return
         if (!active || localSeekPending) return
-        if (player.playbackState == Player.STATE_IDLE) return
+        if (player.phase == SyncPlayer.Phase.Idle) return
 
         val shouldPlay = SyncMath.effectivePlaying(s.playing, presence)
         val gated = s.playing && !shouldPlay
@@ -171,19 +163,19 @@ class SyncEngine(
         // While anyone is buffering, everyone holds still; don't chase the advancing clock.
         if (!gated) {
             val expected = SyncMath.expectedPosition(s.playing, s.position, s.updatedAt, s.rate, ServerTime.now(), durationSec())
-            when (val d = SyncMath.decideDrift(positionSec(), expected, shouldPlay, player.playbackParameters.speed.toDouble())) {
+            when (val d = SyncMath.decideDrift(positionSec(), expected, shouldPlay, player.speed)) {
                 is DriftDecision.Seek -> {
                     debug("correct seek ${"%.2f".format(positionSec())} -> ${"%.2f".format(d.to)}")
-                    player.seekTo((d.to * 1000).toLong())
+                    player.seekTo(d.to)
                 }
-                is DriftDecision.Rate -> player.playbackParameters = PlaybackParameters(d.rate.toFloat())
+                is DriftDecision.Rate -> player.setSpeed(d.rate)
                 DriftDecision.None -> Unit
             }
-        } else if (player.playbackParameters.speed != 1f) {
-            player.playbackParameters = PlaybackParameters(1f)
+        } else if (player.speed != 1.0) {
+            player.setSpeed(1.0)
         }
 
-        val wantPlay = shouldPlay && player.playbackState != Player.STATE_ENDED
+        val wantPlay = shouldPlay && player.phase != SyncPlayer.Phase.Ended
         if (player.playWhenReady != wantPlay) player.playWhenReady = wantPlay
     }
 

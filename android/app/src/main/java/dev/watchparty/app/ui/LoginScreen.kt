@@ -81,41 +81,37 @@ fun LoginScreen() {
         contentAlignment = Alignment.Center,
     ) {
         Column(Modifier.widthIn(max = 420.dp).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Wordmark(26)
-            Text("Watch together, in sync.", color = WpColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 4.dp, bottom = 28.dp))
+            Wordmark(22)
+            Text("Watch anything together, perfectly in sync.", color = WpColors.Muted, fontSize = 14.sp, modifier = Modifier.padding(top = 12.dp, bottom = 28.dp))
 
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                colors = CardDefaults.cardColors(containerColor = WpColors.Surface),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Column(Modifier.fillMaxWidth().wpCard(22)) {
+                Column(Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
                     Text(
                         when (mode) {
                             Mode.Login -> "Welcome back"
                             Mode.Signup -> "Create an account"
                             Mode.Reset -> "Reset password"
                         },
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Medium,
+                        fontSize = 21.sp,
+                        fontWeight = FontWeight.SemiBold,
                     )
                     if (mode == Mode.Signup) {
-                        OutlinedTextField(
+                        WpTextField(
                             value = name, onValueChange = { name = it.take(40) },
-                            label = { Text("Display name") }, singleLine = true,
+                            label = "Display name", placeholder = "", singleLine = true,
                             modifier = Modifier.fillMaxWidth().testTag("name"),
                         )
                     }
-                    OutlinedTextField(
+                    WpTextField(
                         value = email, onValueChange = { email = it },
-                        label = { Text("Email") }, singleLine = true,
+                        label = "Email", placeholder = "", singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
                         modifier = Modifier.fillMaxWidth().testTag("email"),
                     )
                     if (mode != Mode.Reset) {
-                        OutlinedTextField(
+                        WpTextField(
                             value = password, onValueChange = { password = it },
-                            label = { Text("Password") }, singleLine = true,
+                            label = "Password", placeholder = "", singleLine = true,
                             visualTransformation = PasswordVisualTransformation(),
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
                             modifier = Modifier.fillMaxWidth().testTag("password"),
@@ -123,21 +119,17 @@ fun LoginScreen() {
                     }
                     error?.let { Text(it, color = WpColors.Error, fontSize = 14.sp) }
                     notice?.let { Text(it, color = WpColors.Success, fontSize = 14.sp) }
-                    Button(
+                    PrimaryButton(
+                        if (busy) "Please wait…" else when (mode) {
+                            Mode.Login -> "Log in"
+                            Mode.Signup -> "Sign up"
+                            Mode.Reset -> "Send reset link"
+                        },
                         onClick = ::submit,
                         enabled = !busy && email.isNotBlank() && (mode == Mode.Reset || password.length >= 6),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth().testTag("submit"),
-                    ) {
-                        Text(
-                            if (busy) "Please wait…" else when (mode) {
-                                Mode.Login -> "Log in"
-                                Mode.Signup -> "Sign up"
-                                Mode.Reset -> "Send reset link"
-                            },
-                            modifier = Modifier.padding(vertical = 4.dp),
-                        )
-                    }
+                        modifier = Modifier.fillMaxWidth(),
+                        tag = "submit",
+                    )
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         if (mode == Mode.Login) {
                             TextButton(onClick = { switch(Mode.Signup) }) { Text("Create account", color = WpColors.Muted) }
