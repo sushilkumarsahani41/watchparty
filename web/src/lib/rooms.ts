@@ -1,16 +1,8 @@
 "use client";
 
-import {
-  get,
-  push,
-  ref,
-  remove,
-  serverTimestamp,
-  set,
-  update,
-} from "firebase/database";
+import { get, push, ref, remove, serverTimestamp, set, update } from "firebase/database";
 import type { User } from "firebase/auth";
-import { paths, type RoomMeta } from "@watchparty/shared";
+import { paths, roomCreationWrites, type RoomMeta } from "@watchparty/shared";
 import { firebase } from "./firebase";
 
 /** Public multi-bitrate HLS stream used until the desktop uploader exists. */
@@ -48,10 +40,7 @@ export async function forgetRoom(roomId: string, uid: string) {
   ]);
 }
 
-/**
- * Create a room. Membership is written first because the rules check membership
- * against existing data, so it can't go in the same multi-path update as state.
- */
+/** Create a room: membership first (rules check it against existing data), then meta + state. */
 export async function createRoom(
   user: User,
   opts: { title: string; hlsUrl: string; videoId: string; durationSec: number },
@@ -59,27 +48,9 @@ export async function createRoom(
   const { db } = firebase();
   const roomId = push(ref(db, "rooms")).key;
   if (!roomId) throw new Error("Could not allocate a room id");
-
-  await joinRoom(roomId, user.uid);
-  const meta: Omit<RoomMeta, "createdAt"> & { createdAt: object } = {
-    title: opts.title,
-    hostUid: user.uid,
-    createdAt: serverTimestamp(),
-    videoId: opts.videoId,
-    hlsUrl: opts.hlsUrl,
-    durationSec: opts.durationSec,
-  };
-  await update(ref(db), {
-    [paths.roomMeta(roomId)]: meta,
-    [paths.roomState(roomId)]: {
-      playing: false,
-      position: 0,
-      updatedAt: serverTimestamp(),
-      rate: 1,
-      rev: 0,
-      by: user.uid,
-    },
-  });
+  const writes = roomCreationWrites({ roomId, hostUid: user.uid, ...opts }, serverTimestamp());
+  await update(ref(db), writes.membership);
+  await update(ref(db), writes.content);
   return roomId;
 }
 

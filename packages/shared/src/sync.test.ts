@@ -35,3 +35,18 @@ describe("buffering gate", () => {
     });
   }
 });
+
+describe("room helpers", async () => {
+  const { roomCreationWrites, hlsUrlFor, inviteLinkFor } = await import("./rooms");
+  it("orders membership before content and stamps server time", () => {
+    const ts = { ".sv": "timestamp" };
+    const w = roomCreationWrites({ roomId: "r1", hostUid: "u1", title: "T", videoId: "v1", hlsUrl: "h", durationSec: 5 }, ts);
+    expect(Object.keys(w.membership)).toEqual(["roomMembers/r1/u1", "userRooms/u1/r1"]);
+    expect(w.content["rooms/r1/state"]).toMatchObject({ playing: false, position: 0, rev: 0, by: "u1", updatedAt: ts });
+    expect(w.content["rooms/r1/meta"]).toMatchObject({ hostUid: "u1", createdAt: ts, hlsUrl: "h" });
+  });
+  it("builds URLs without double slashes", () => {
+    expect(hlsUrlFor("https://media.x.com/", "abc")).toBe("https://media.x.com/videos/abc/master.m3u8");
+    expect(inviteLinkFor("https://w.x.com//", "r1")).toBe("https://w.x.com/room/r1");
+  });
+});

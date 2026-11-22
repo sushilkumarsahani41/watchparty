@@ -4,4 +4,7 @@ packages:
   - desktop
 allowBuilds:
   '@firebase/util': false
+  electron-winstaller: false
+  ffmpeg-static: true
+  electron: true
   protobufjs: false

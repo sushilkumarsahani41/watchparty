@@ -61,10 +61,12 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - Note: the emulator's `goldfish` H.264 decoder sometimes shows garbled frames after quality switches.
   Not seen on web; confirm on a real phone.
 
-### 6. Desktop uploader (Electron)
-- [ ] FFmpeg multi-rendition HLS with progress + cancel, encoder detection
-- [ ] R2 parallel upload with retry/resume, room creation, invite link
-- *Done when:* a local MP4 becomes a playable room on Android and web.
+### 6. Desktop uploader (Electron) ✅ (real R2 run pending your keys)
+- [x] FFmpeg multi-rendition HLS with progress + cancel, encoder detection (libx264 / VideoToolbox / NVENC, test-encoded), no-audio sources, skip tiers above source
+- [x] R2 parallel upload (6), segments → variants → master, retry ×5 with backoff, resume via HeadObject, room creation, invite link; settings screen with keychain-encrypted R2 keys
+- [x] Verified end to end with a local S3 stand-in for R2 + Firebase emulators: 40s 1080p MP4 → 4 renditions →
+      33 objects with correct types/cache headers → room → plays and syncs in two web browsers.
+- [ ] Real Cloudflare R2 run (needs bucket + API token)
 
 ### 7. Polish + release
 - [ ] Error states, reconnect handling, README (Firebase, R2, Android setup)
