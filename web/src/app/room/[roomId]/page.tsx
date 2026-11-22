@@ -2,13 +2,16 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { User } from "firebase/auth";
 import { AuthGate, FullScreenMessage } from "@/components/AuthGate";
 import { ChatPanel } from "@/components/ChatPanel";
 import { Participants } from "@/components/Participants";
+import { SyncStatus } from "@/components/SyncStatus";
+import { VideoPlayer } from "@/components/VideoPlayer";
 import { inviteLink } from "@/lib/rooms";
 import { useRoom } from "@/lib/useRoom";
+import { useSync } from "@/lib/useSync";
 
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
@@ -18,6 +21,17 @@ export default function RoomPage() {
 function RoomView({ roomId, user }: { roomId: string; user: User }) {
   const room = useRoom(roomId, user);
   const [copied, setCopied] = useState(false);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const sync = useSync({
+    videoRef,
+    roomId,
+    uid: user.uid,
+    state: room.state,
+    presence: room.presence,
+    durationSec: room.meta?.durationSec ?? 0,
+    setBuffering: room.setBuffering,
+    mounted: room.status === "ready" && room.meta !== null,
+  });
 
   if (room.status === "notFound")
     return <FullScreenMessage title="Room not found" body="This invite link is wrong or the room was deleted." />;
@@ -48,9 +62,32 @@ function RoomView({ roomId, user }: { roomId: string; user: User }) {
 
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
         <div className="shrink-0 bg-black lg:flex lg:min-w-0 lg:flex-1 lg:items-center">
-          <div className="flex aspect-video w-full items-center justify-center text-sm text-zinc-500">
-            Synced player arrives in milestone 3
-          </div>
+          <VideoPlayer
+            src={room.meta.hlsUrl}
+            videoRef={videoRef}
+            controlsEnabled={sync.unlocked}
+            overlay={
+              <>
+                <SyncStatus
+                  waitingFor={sync.waitingFor}
+                  selfBuffering={sync.selfBuffering}
+                  state={room.state}
+                  presence={room.presence}
+                  selfUid={user.uid}
+                />
+                {!sync.unlocked && (
+                  <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/60">
+                    <button
+                      onClick={sync.unlock}
+                      className="rounded-full bg-accent-strong px-6 py-3 font-medium text-white shadow-xl transition hover:bg-accent"
+                    >
+                      ▶ Join &amp; sync
+                    </button>
+                  </div>
+                )}
+              </>
+            }
+          />
         </div>
         <aside className="flex min-h-0 flex-1 flex-col border-white/10 lg:w-96 lg:flex-none lg:border-l">
           <Participants presence={room.presence} selfUid={user.uid} />

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   limitToLast,
   onDisconnect,
@@ -140,13 +140,17 @@ export function useRoom(roomId: string, user: User): RoomData & { setBuffering: 
     };
   }, [ready, roomId, user]);
 
-  const setBuffering = (buffering: boolean) => {
-    if (bufferingRef.current === buffering) return;
-    bufferingRef.current = buffering;
-    if (!joinedRef.current) return;
-    const { db } = firebase();
-    void update(ref(db, paths.roomPresenceUser(roomId, user.uid)), { buffering }).catch(() => {});
-  };
+  const uid = user.uid;
+  const setBuffering = useCallback(
+    (buffering: boolean) => {
+      if (bufferingRef.current === buffering) return;
+      bufferingRef.current = buffering;
+      if (!joinedRef.current) return;
+      const { db } = firebase();
+      void update(ref(db, paths.roomPresenceUser(roomId, uid)), { buffering }).catch(() => {});
+    },
+    [roomId, uid],
+  );
 
   return { ...data, setBuffering };
 }

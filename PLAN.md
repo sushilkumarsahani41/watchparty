@@ -11,6 +11,12 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
   live once in `packages/shared/src/sync.vectors.json` and both vitest and the Android JUnit tests run them.
 - **Uploader stays desktop-only** (Electron + FFmpeg), as in the spec.
 - Firebase project: `watchparty-o222t`, RTDB in `asia-southeast1`.
+- **Sync refinements** (in shared math + vectors):
+  - While paused, drift > 0.3s seeks (invisible) instead of waiting for rate correction after resume.
+  - When a participant recovers from buffering more than 1.5s behind, they write their position as the new
+    shared state, so the room rewinds to them instead of everyone skipping the part they missed.
+  - A stall must last 400ms before it counts as buffering, so tiny hiccups don't pause everyone.
+  - Holding Space doesn't auto-repeat play/pause.
 
 ## Milestones
 
@@ -27,10 +33,10 @@ Base design: [`WATCHPARTY_SPEC.md`](WATCHPARTY_SPEC.md). This file records chang
 - [x] `ChatPanel` (last 100 messages, 1000-char limit), `Participants` with presence + onDisconnect
 - [x] Verified: two browsers join via link, chat both ways, presence updates, bad links show "Room not found"
 
-### 3. Synced player (web)
-- [ ] `VideoPlayer` (hls.js, native HLS fallback), custom controls, keyboard
-- [ ] `serverTime.ts`, `useSync` (local writes, remote apply, echo guard, drift heartbeat, late-join button)
-- *Done when:* pause/seek in A shows in B within ~1s, both ways, no loops.
+### 3. Synced player (web) ✅
+- [x] `VideoPlayer` (hls.js, native HLS fallback), custom controls, keyboard
+- [x] `serverTime.ts`, `useSync` (local writes, remote apply, echo guard, drift heartbeat, late-join button)
+- [x] Verified: play/pause/seek both ways within ~0.05s, no echo writes, late join (paused and playing) lands within 0.05s without writing
 
 ### 4. Buffering-aware sync + quality menu + SyncStatus (web)
 - [ ] Presence buffering flag, gate on `effectivePlaying`, "X is buffering…"

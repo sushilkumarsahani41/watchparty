@@ -1,30 +1,278 @@
 {
   "_comment": "Shared test cases for sync math. Run by vitest (sync.test.ts) and Android JUnit (SyncVectorsTest.kt). Change both implementations together.",
   "expectedPosition": [
-    { "name": "paused returns position", "state": { "playing": false, "position": 10, "updatedAt": 1000000, "rate": 1 }, "now": 1005000, "expected": 10 },
-    { "name": "playing advances by elapsed", "state": { "playing": true, "position": 10, "updatedAt": 1000000, "rate": 1 }, "now": 1005000, "expected": 15 },
-    { "name": "scales by rate", "state": { "playing": true, "position": 10, "updatedAt": 1000000, "rate": 2 }, "now": 1005000, "expected": 20 },
-    { "name": "rate 0 treated as 1", "state": { "playing": true, "position": 10, "updatedAt": 1000000, "rate": 0 }, "now": 1002000, "expected": 12 },
-    { "name": "negative elapsed ignored", "state": { "playing": true, "position": 10, "updatedAt": 1000000, "rate": 1 }, "now": 999000, "expected": 10 },
-    { "name": "clamped to duration", "state": { "playing": true, "position": 10, "updatedAt": 1000000, "rate": 1 }, "now": 1100000, "durationSec": 60, "expected": 60 },
-    { "name": "never negative", "state": { "playing": false, "position": -3, "updatedAt": 1000000, "rate": 1 }, "now": 1000000, "expected": 0 }
+    {
+      "name": "paused returns position",
+      "state": {
+        "playing": false,
+        "position": 10,
+        "updatedAt": 1000000,
+        "rate": 1
+      },
+      "now": 1005000,
+      "expected": 10
+    },
+    {
+      "name": "playing advances by elapsed",
+      "state": {
+        "playing": true,
+        "position": 10,
+        "updatedAt": 1000000,
+        "rate": 1
+      },
+      "now": 1005000,
+      "expected": 15
+    },
+    {
+      "name": "scales by rate",
+      "state": {
+        "playing": true,
+        "position": 10,
+        "updatedAt": 1000000,
+        "rate": 2
+      },
+      "now": 1005000,
+      "expected": 20
+    },
+    {
+      "name": "rate 0 treated as 1",
+      "state": {
+        "playing": true,
+        "position": 10,
+        "updatedAt": 1000000,
+        "rate": 0
+      },
+      "now": 1002000,
+      "expected": 12
+    },
+    {
+      "name": "negative elapsed ignored",
+      "state": {
+        "playing": true,
+        "position": 10,
+        "updatedAt": 1000000,
+        "rate": 1
+      },
+      "now": 999000,
+      "expected": 10
+    },
+    {
+      "name": "clamped to duration",
+      "state": {
+        "playing": true,
+        "position": 10,
+        "updatedAt": 1000000,
+        "rate": 1
+      },
+      "now": 1100000,
+      "durationSec": 60,
+      "expected": 60
+    },
+    {
+      "name": "never negative",
+      "state": {
+        "playing": false,
+        "position": -3,
+        "updatedAt": 1000000,
+        "rate": 1
+      },
+      "now": 1000000,
+      "expected": 0
+    }
   ],
   "decideDrift": [
-    { "name": "seek when ahead > 1.5s", "input": { "currentTime": 20, "expected": 10, "playing": true, "currentRate": 1 }, "result": { "action": "seek", "to": 10 } },
-    { "name": "seek when behind > 1.5s while paused", "input": { "currentTime": 8, "expected": 10, "playing": false, "currentRate": 1 }, "result": { "action": "seek", "to": 10 } },
-    { "name": "slow down when ahead 0.3-1.5s", "input": { "currentTime": 10.5, "expected": 10, "playing": true, "currentRate": 1 }, "result": { "action": "rate", "rate": 0.95 } },
-    { "name": "speed up when behind 0.3-1.5s", "input": { "currentTime": 9.5, "expected": 10, "playing": true, "currentRate": 1 }, "result": { "action": "rate", "rate": 1.05 } },
-    { "name": "no rate correction while paused", "input": { "currentTime": 10.5, "expected": 10, "playing": false, "currentRate": 1 }, "result": { "action": "none" } },
-    { "name": "none when already at correction rate", "input": { "currentTime": 10.5, "expected": 10, "playing": true, "currentRate": 0.95 }, "result": { "action": "none" } },
-    { "name": "hysteresis band keeps rate", "input": { "currentTime": 10.2, "expected": 10, "playing": true, "currentRate": 0.95 }, "result": { "action": "none" } },
-    { "name": "restore rate below 0.1", "input": { "currentTime": 10.05, "expected": 10, "playing": true, "currentRate": 0.95 }, "result": { "action": "rate", "rate": 1 } },
-    { "name": "restore rate when paused", "input": { "currentTime": 10.2, "expected": 10, "playing": false, "currentRate": 1.05 }, "result": { "action": "rate", "rate": 1 } },
-    { "name": "in sync does nothing", "input": { "currentTime": 10.05, "expected": 10, "playing": true, "currentRate": 1 }, "result": { "action": "none" } }
+    {
+      "name": "seek when ahead > 1.5s",
+      "input": {
+        "currentTime": 20,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "seek",
+        "to": 10
+      }
+    },
+    {
+      "name": "seek when behind > 1.5s while paused",
+      "input": {
+        "currentTime": 8,
+        "expected": 10,
+        "playing": false,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "seek",
+        "to": 10
+      }
+    },
+    {
+      "name": "slow down when ahead 0.3-1.5s",
+      "input": {
+        "currentTime": 10.5,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "rate",
+        "rate": 0.95
+      }
+    },
+    {
+      "name": "speed up when behind 0.3-1.5s",
+      "input": {
+        "currentTime": 9.5,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "rate",
+        "rate": 1.05
+      }
+    },
+    {
+      "name": "paused drift > 0.3 seeks instead of rate-correcting",
+      "input": {
+        "currentTime": 10.5,
+        "expected": 10,
+        "playing": false,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "seek",
+        "to": 10
+      }
+    },
+    {
+      "name": "none when already at correction rate",
+      "input": {
+        "currentTime": 10.5,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 0.95
+      },
+      "result": {
+        "action": "none"
+      }
+    },
+    {
+      "name": "hysteresis band keeps rate",
+      "input": {
+        "currentTime": 10.2,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 0.95
+      },
+      "result": {
+        "action": "none"
+      }
+    },
+    {
+      "name": "restore rate below 0.1",
+      "input": {
+        "currentTime": 10.05,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 0.95
+      },
+      "result": {
+        "action": "rate",
+        "rate": 1
+      }
+    },
+    {
+      "name": "restore rate when paused",
+      "input": {
+        "currentTime": 10.2,
+        "expected": 10,
+        "playing": false,
+        "currentRate": 1.05
+      },
+      "result": {
+        "action": "rate",
+        "rate": 1
+      }
+    },
+    {
+      "name": "in sync does nothing",
+      "input": {
+        "currentTime": 10.05,
+        "expected": 10,
+        "playing": true,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "none"
+      }
+    },
+    {
+      "name": "paused small drift does nothing",
+      "input": {
+        "currentTime": 10.2,
+        "expected": 10,
+        "playing": false,
+        "currentRate": 1
+      },
+      "result": {
+        "action": "none"
+      }
+    }
   ],
   "bufferingGate": [
-    { "name": "only online buffering listed", "statePlaying": true, "presence": { "a": { "online": true, "buffering": true }, "b": { "online": false, "buffering": true }, "c": { "online": true, "buffering": false } }, "buffering": ["a"], "effectivePlaying": false },
-    { "name": "null presence", "statePlaying": true, "presence": null, "buffering": [], "effectivePlaying": true },
-    { "name": "paused state", "statePlaying": false, "presence": {}, "buffering": [], "effectivePlaying": false },
-    { "name": "offline buffering ignored", "statePlaying": true, "presence": { "a": { "online": false, "buffering": true }, "b": { "online": true, "buffering": false } }, "buffering": [], "effectivePlaying": true }
+    {
+      "name": "only online buffering listed",
+      "statePlaying": true,
+      "presence": {
+        "a": {
+          "online": true,
+          "buffering": true
+        },
+        "b": {
+          "online": false,
+          "buffering": true
+        },
+        "c": {
+          "online": true,
+          "buffering": false
+        }
+      },
+      "buffering": [
+        "a"
+      ],
+      "effectivePlaying": false
+    },
+    {
+      "name": "null presence",
+      "statePlaying": true,
+      "presence": null,
+      "buffering": [],
+      "effectivePlaying": true
+    },
+    {
+      "name": "paused state",
+      "statePlaying": false,
+      "presence": {},
+      "buffering": [],
+      "effectivePlaying": false
+    },
+    {
+      "name": "offline buffering ignored",
+      "statePlaying": true,
+      "presence": {
+        "a": {
+          "online": false,
+          "buffering": true
+        },
+        "b": {
+          "online": true,
+          "buffering": false
+        }
+      },
+      "buffering": [],
+      "effectivePlaying": true
+    }
   ]
 }

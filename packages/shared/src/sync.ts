@@ -39,6 +39,7 @@ export type DriftDecision =
 /**
  * Decide how to correct the local player.
  * - |drift| > 1.5s           -> seek to expected
+ * - paused && |drift| > 0.3  -> seek to expected (invisible while paused)
  * - playing && |drift| > 0.3 -> nudge playbackRate (0.95 if ahead, 1.05 if behind)
  * - corrected && |drift| < 0.1 -> restore base rate
  * Between 0.1 and 0.3 the current rate is kept (hysteresis).
@@ -55,6 +56,8 @@ export function decideDrift(params: {
   const abs = Math.abs(drift);
 
   if (abs > SEEK_THRESHOLD) return { action: "seek", to: params.expected };
+  // While paused a seek is invisible, so align tightly instead of leaving it to rate correction later.
+  if (!params.playing && abs > RATE_THRESHOLD) return { action: "seek", to: params.expected };
 
   if (params.playing && abs > RATE_THRESHOLD) {
     const rate = baseRate * (drift > 0 ? SLOW_FACTOR : FAST_FACTOR);
